@@ -57,7 +57,7 @@ impl LoginService {
         } = deps;
 
         registry.lock().await.register(
-            "logn_service_request_counter",
+            "login_service_request_counter",
             "Total number of requests to the LoginService",
             metrics.lock().await.request_counter.clone(),
         );

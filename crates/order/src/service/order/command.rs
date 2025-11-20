@@ -76,12 +76,12 @@ impl OrderCommandService {
         } = deps;
 
         registry.lock().await.register(
-            "command_service_request_counter",
+            "order_command_service_request_counter",
             "Total number of requests to the OrderCommandService",
             metrics.lock().await.request_counter.clone(),
         );
         registry.lock().await.register(
-            "command_service_request_duration",
+            "order_command_service_request_duration",
             "Histogram of request durations for the OrderCommandService",
             metrics.lock().await.request_duration.clone(),
         );

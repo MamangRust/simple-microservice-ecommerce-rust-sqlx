@@ -41,13 +41,13 @@ impl OrderItemGrpcClientService {
         registry: Arc<Mutex<Registry>>,
     ) -> Self {
         registry.lock().await.register(
-            "order_service_client_request_counter",
-            "Total number of requests to the OrderGrpcClientService",
+            "order_item_service_client_request_counter",
+            "Total number of requests to the OrderItemGrpcClientService",
             metrics.lock().await.request_counter.clone(),
         );
         registry.lock().await.register(
-            "order_service_client_duration",
-            "Histogram of request durations for the OrderGrpcClientService",
+            "order_item_service_client_duration",
+            "Histogram of request durations for the OrderItemGrpcClientService",
             metrics.lock().await.request_duration.clone(),
         );
 
