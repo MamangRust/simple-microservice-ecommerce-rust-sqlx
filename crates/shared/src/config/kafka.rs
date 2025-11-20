@@ -24,7 +24,7 @@ impl Kafka {
             .set("bootstrap.servers", brokers)
             .set("message.timeout.ms", "6000")
             .set("auto.offset.reset", "earliest")
-            .set("allow.auto.create.topics", "true")
+            .set("allow.auto.create.topics", "false")
             .create()
             .expect("Failed to create Kafka producer");
         info!("Kafka producer connected successfully");
@@ -55,7 +55,7 @@ impl Kafka {
             .set("session.timeout.ms", "6000")
             .set("enable.auto.commit", "true")
             .set("auto.offset.reset", "earliest")
-            .set("allow.auto.create.topics", "true")
+            .set("allow.auto.create.topics", "false")
             .create()
             .expect("Failed to create Kafka consumer");
 

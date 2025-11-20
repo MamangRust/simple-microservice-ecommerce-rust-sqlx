@@ -26,7 +26,7 @@ impl KafkaEmailService {
             .set("session.timeout.ms", "6000")
             .set("enable.auto.commit", "true")
             .set("auto.offset.reset", "earliest")
-            .set("allow.auto.create.topics", "true")
+            .set("allow.auto.create.topics", "false")
             .create()
             .map_err(ServiceError::from)?;
 
