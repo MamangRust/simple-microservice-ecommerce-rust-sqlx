@@ -1,0 +1,8 @@
+{"timestamp":"2025-11-20T08:57:50.745665Z","level":"INFO","fields":{"message":"🚀 Starting Role Service initialization..."},"target":"role"}
+{"timestamp":"2025-11-20T08:57:50.792020Z","level":"INFO","fields":{"message":"relation \"_sqlx_migrations\" already exists, skipping"},"target":"sqlx::postgres::notice"}
+{"timestamp":"2025-11-20T08:57:50.802598Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T08:57:50.804386Z","level":"INFO","fields":{"message":"Pinging redis"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T08:57:50.804758Z","level":"INFO","fields":{"message":"Pinged redis"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T08:57:50.805183Z","level":"INFO","fields":{"message":"📡 Starting gRPC server on 0.0.0.0:50053"},"target":"role"}
+{"timestamp":"2025-11-20T08:57:50.805660Z","level":"INFO","fields":{"message":"🔧 Starting metrics server on 0.0.0.0:8082"},"target":"role"}
+{"timestamp":"2025-11-20T08:57:50.805686Z","level":"INFO","fields":{"message":"Starting metrics server on 0.0.0.0:8082"},"target":"role"}

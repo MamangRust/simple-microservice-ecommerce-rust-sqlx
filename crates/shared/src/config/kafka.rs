@@ -22,7 +22,9 @@ impl Kafka {
     pub fn new(brokers: &str) -> Self {
         let producer: BaseProducer = ClientConfig::new()
             .set("bootstrap.servers", brokers)
-            .set("message.timeout.ms", "5000")
+            .set("message.timeout.ms", "6000")
+            .set("auto.offset.reset", "earliest")
+            .set("allow.auto.create.topics", "true")
             .create()
             .expect("Failed to create Kafka producer");
         info!("Kafka producer connected successfully");
@@ -52,6 +54,8 @@ impl Kafka {
             .set("enable.partition.eof", "false")
             .set("session.timeout.ms", "6000")
             .set("enable.auto.commit", "true")
+            .set("auto.offset.reset", "earliest")
+            .set("allow.auto.create.topics", "true")
             .create()
             .expect("Failed to create Kafka consumer");
 
