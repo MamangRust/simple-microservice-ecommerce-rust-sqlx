@@ -1,22 +1,34 @@
-{"timestamp":"2025-11-20T13:09:17.457387Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
-{"timestamp":"2025-11-20T13:09:17.457525Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
-{"timestamp":"2025-11-20T13:09:17.927043Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
-{"timestamp":"2025-11-20T13:09:17.927100Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
-{"timestamp":"2025-11-20T13:09:18.432181Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
-{"timestamp":"2025-11-20T13:09:18.432213Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
-{"timestamp":"2025-11-20T13:09:19.183564Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
-{"timestamp":"2025-11-20T13:09:19.183615Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
-{"timestamp":"2025-11-20T13:09:20.274396Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
-{"timestamp":"2025-11-20T13:09:20.274440Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
-{"timestamp":"2025-11-20T13:09:22.164128Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
-{"timestamp":"2025-11-20T13:09:22.164160Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
-{"timestamp":"2025-11-20T13:09:25.704188Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
-{"timestamp":"2025-11-20T13:09:25.704222Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
-{"timestamp":"2025-11-20T13:09:32.403226Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
-{"timestamp":"2025-11-20T13:09:32.403263Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
-{"timestamp":"2025-11-20T13:09:45.483354Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
-{"timestamp":"2025-11-20T13:09:45.483391Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
-{"timestamp":"2025-11-20T13:10:11.449871Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
-{"timestamp":"2025-11-20T13:10:11.450035Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
-{"timestamp":"2025-11-20T13:11:03.038529Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
-{"timestamp":"2025-11-20T13:11:03.038601Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T13:29:23.451854Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
+{"timestamp":"2025-11-20T13:29:23.451949Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T13:29:24.630180Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
+{"timestamp":"2025-11-20T13:29:24.630243Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T13:29:25.683826Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
+{"timestamp":"2025-11-20T13:29:25.683883Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T13:29:26.583351Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
+{"timestamp":"2025-11-20T13:29:26.583413Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T13:29:27.747507Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
+{"timestamp":"2025-11-20T13:29:27.747540Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T13:29:29.642776Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
+{"timestamp":"2025-11-20T13:29:29.642814Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T13:29:33.128850Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
+{"timestamp":"2025-11-20T13:29:33.128881Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T13:29:39.836940Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
+{"timestamp":"2025-11-20T13:29:39.836973Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T13:29:52.981325Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
+{"timestamp":"2025-11-20T13:29:52.981364Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T13:30:18.947735Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
+{"timestamp":"2025-11-20T13:30:18.947775Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T13:31:10.469310Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
+{"timestamp":"2025-11-20T13:31:10.469346Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T13:32:11.580308Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
+{"timestamp":"2025-11-20T13:32:11.580500Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T13:33:12.601763Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
+{"timestamp":"2025-11-20T13:33:12.601991Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T13:34:13.269656Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
+{"timestamp":"2025-11-20T13:34:13.269716Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T13:35:13.808239Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
+{"timestamp":"2025-11-20T13:35:13.808333Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T13:36:14.193874Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
+{"timestamp":"2025-11-20T13:36:14.193934Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T13:37:14.790907Z","level":"INFO","fields":{"message":"Initializing Redis connection for API Gateway"},"target":"apigateway::state"}
+{"timestamp":"2025-11-20T13:37:14.790981Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}

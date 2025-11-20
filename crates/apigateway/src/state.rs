@@ -31,8 +31,7 @@ impl AppState {
         let grpc_config = GrpcClientConfig::init().context("failed config grpc")?;
 
         info!("Initializing Redis connection for API Gateway");
-        let redis_config =
-            RedisConfig::new("localhost".into(), 6379, 0, Some("dragon_knight".into()));
+        let redis_config = RedisConfig::new("redis".into(), 6379, 0, Some("dragon_knight".into()));
         let redis = RedisClient::new(&redis_config)
             .await
             .context("Failed to connect to Redis")?;
