@@ -1,14 +1,8 @@
 [workspace]
 members = [
   "crates/apigateway",
-  "crates/auth",
-  "crates/email",
-  "crates/genproto",
-  "crates/order",
-  "crates/product",
-  "crates/role",
   "crates/shared",
-  "crates/user",
+  "crates/genproto",
 ]
 resolver = "3"
 

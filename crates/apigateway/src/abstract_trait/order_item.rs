@@ -17,16 +17,16 @@ pub trait OrderItemGrpcClientTrait {
     async fn find_all(
         &self,
         req: &FindAllOrderItems,
-    ) -> Result<ApiResponsePagination<OrderItemResponse>, HttpError>;
+    ) -> Result<ApiResponsePagination<Vec<OrderItemResponse>>, HttpError>;
     async fn find_by_active(
         &self,
         req: &FindAllOrderItems,
-    ) -> Result<ApiResponsePagination<OrderItemResponseDeleteAt>, HttpError>;
+    ) -> Result<ApiResponsePagination<Vec<OrderItemResponseDeleteAt>>, HttpError>;
 
     async fn find_by_trashed(
         &self,
         req: &FindAllOrderItems,
-    ) -> Result<ApiResponsePagination<OrderItemResponseDeleteAt>, HttpError>;
+    ) -> Result<ApiResponsePagination<Vec<OrderItemResponseDeleteAt>>, HttpError>;
 
     async fn find_order_item_by_order(
         &self,

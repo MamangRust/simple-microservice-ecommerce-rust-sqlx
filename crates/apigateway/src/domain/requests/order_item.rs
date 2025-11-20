@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
+use utoipa::IntoParams;
 use validator::Validate;
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
+#[derive(Debug, Serialize, Deserialize, Validate, IntoParams)]
 pub struct FindAllOrderItems {
     #[validate(length(min = 1))]
     pub search: String,

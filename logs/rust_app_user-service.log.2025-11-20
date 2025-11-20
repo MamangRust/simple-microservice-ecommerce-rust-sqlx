@@ -1,9 +1,0 @@
-{"timestamp":"2025-11-20T13:29:21.095399Z","level":"INFO","fields":{"message":"Starting server user initialization..."},"target":"user"}
-{"timestamp":"2025-11-20T13:29:21.140588Z","level":"INFO","fields":{"message":"relation \"_sqlx_migrations\" already exists, skipping"},"target":"sqlx::postgres::notice"}
-{"timestamp":"2025-11-20T13:29:21.162959Z","level":"INFO","fields":{"message":"Kafka producer connected successfully"},"target":"shared::config::kafka"}
-{"timestamp":"2025-11-20T13:29:21.163032Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
-{"timestamp":"2025-11-20T13:29:21.167048Z","level":"INFO","fields":{"message":"Pinging redis"},"target":"shared::config::redis"}
-{"timestamp":"2025-11-20T13:29:21.167780Z","level":"INFO","fields":{"message":"Pinged redis"},"target":"shared::config::redis"}
-{"timestamp":"2025-11-20T13:29:21.173282Z","level":"INFO","fields":{"message":"Starting gRPC server on 0.0.0.0:50052"},"target":"user"}
-{"timestamp":"2025-11-20T13:29:21.174166Z","level":"INFO","fields":{"message":"🔧 Starting metrics server on 0.0.0.0:8081"},"target":"user"}
-{"timestamp":"2025-11-20T13:29:21.174236Z","level":"INFO","fields":{"message":"Starting metrics server on 0.0.0.0:8081"},"target":"user"}

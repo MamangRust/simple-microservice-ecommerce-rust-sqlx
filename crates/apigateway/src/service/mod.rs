@@ -1,11 +1,13 @@
 mod auth;
 mod order;
+mod order_item;
 mod product;
 mod role;
 mod user;
 
 pub use self::auth::AuthGrpcClientService;
 pub use self::order::OrderGrpcClientService;
+pub use self::order_item::OrderItemGrpcClientService;
 pub use self::product::ProductGrpcClientService;
 pub use self::role::RoleGrpcClientService;
 pub use self::user::UserGrpcClientService;
@@ -22,6 +24,7 @@ use genproto::{
         order_command_service_client::OrderCommandServiceClient,
         order_query_service_client::OrderQueryServiceClient,
     },
+    order_item::order_item_service_client::OrderItemServiceClient,
     product::{
         product_command_service_client::ProductCommandServiceClient,
         product_query_service_client::ProductQueryServiceClient,
@@ -55,6 +58,8 @@ pub struct GrpcClients {
     // Order
     pub order_command: Arc<Mutex<OrderCommandServiceClient<Channel>>>,
     pub order_query: Arc<Mutex<OrderQueryServiceClient<Channel>>>,
+
+    pub order_item: Arc<Mutex<OrderItemServiceClient<Channel>>>,
 }
 
 impl GrpcClients {
@@ -86,7 +91,12 @@ impl GrpcClients {
             order_command: Arc::new(Mutex::new(OrderCommandServiceClient::new(
                 order_channel.clone(),
             ))),
-            order_query: Arc::new(Mutex::new(OrderQueryServiceClient::new(order_channel))),
+            order_query: Arc::new(Mutex::new(OrderQueryServiceClient::new(
+                order_channel.clone(),
+            ))),
+            order_item: Arc::new(Mutex::new(OrderItemServiceClient::new(
+                order_channel.clone(),
+            ))),
         })
     }
 

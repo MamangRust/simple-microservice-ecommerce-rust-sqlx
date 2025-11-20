@@ -1,5 +1,6 @@
 mod auth;
 mod order;
+mod order_item;
 mod product;
 mod role;
 mod user;
@@ -23,6 +24,7 @@ use utoipa_swagger_ui::SwaggerUi;
 
 pub use self::auth::auth_routes;
 pub use self::order::order_routes;
+pub use self::order_item::order_item_routes;
 pub use self::product::product_routes;
 pub use self::role::roles_routes;
 pub use self::user::user_routes;
@@ -88,6 +90,11 @@ pub use self::user::user_routes;
         order::restore_all_order_handler,
         order::delete_all_order_handler,
 
+        order_item::get_order_items,
+        order_item::get_active_order_items,
+        order_item::get_trashed_order_items,
+        order_item::get_items_by_order_id,
+
     ),
     modifiers(&SecurityAddon),
     tags(
@@ -96,6 +103,7 @@ pub use self::user::user_routes;
         (name = "User", description = "User endpoints"),
         (name = "Product", description = "Product endpoints"),
         (name = "Order", description = "Order endpoints"),
+        (name = "Order-item", description = "Order Item endpoints"),
     )
 )]
 struct ApiDoc;
@@ -150,7 +158,8 @@ impl AppRouter {
             .merge(user_routes(shared_state.clone()))
             .merge(roles_routes(shared_state.clone()))
             .merge(product_routes(shared_state.clone()))
-            .merge(order_routes(shared_state.clone()));
+            .merge(order_routes(shared_state.clone()))
+            .merge(order_item_routes(shared_state.clone()));
 
         let router_with_layers = api_router
             .layer(DefaultBodyLimit::disable())

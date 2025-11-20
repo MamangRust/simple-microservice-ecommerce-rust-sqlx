@@ -1,2 +1,0 @@
-{"timestamp":"2025-11-20T13:29:20.395859Z","level":"INFO","fields":{"message":"🚀 Starting Email Service..."},"target":"email::app"}
-{"timestamp":"2025-11-20T13:29:20.395909Z","level":"INFO","fields":{"message":"🚀 Starting Kafka consumer..."},"target":"email::service::kafka"}
