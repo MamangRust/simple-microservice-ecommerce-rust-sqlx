@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package order;
+
+import "api.proto";
+import "order/common.proto";
+
+message FindAllOrderRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+  string search = 3;
+}
+
+message ApiResponsePaginationOrderDeleteAt {
+  string status = 1;
+  string message = 2;
+  repeated order.OrderResponseDeleteAt data = 3;
+  api.Pagination pagination = 4;
+}
+
+message ApiResponsePaginationOrder {
+  string status = 1;
+  string message = 2;
+  repeated order.OrderResponse data = 3;
+  api.Pagination pagination = 4;
+}
+
+service OrderQueryService {
+  rpc FindAll(FindAllOrderRequest) returns (ApiResponsePaginationOrder);
+  rpc FindById(order.FindByIdOrderRequest) returns (order.ApiResponseOrder);
+
+  rpc FindByActive(FindAllOrderRequest)
+      returns (ApiResponsePaginationOrderDeleteAt);
+  rpc FindByTrashed(FindAllOrderRequest)
+      returns (ApiResponsePaginationOrderDeleteAt);
+}

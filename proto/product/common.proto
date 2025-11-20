@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package product;
+
+import "google/protobuf/wrappers.proto";
+
+message FindByIdProductRequest { int32 id = 1; }
+
+message ProductResponse {
+  int32 id = 1;
+  string name = 2;
+  int64 price = 3;
+  int32 stock = 4;
+  string created_at = 5;
+  string updated_at = 6;
+}
+
+message ProductResponseDeleteAt {
+  int32 id = 1;
+  string name = 2;
+  int64 price = 3;
+  int32 stock = 4;
+  string created_at = 5;
+  string updated_at = 6;
+  google.protobuf.StringValue deleted_at = 7;
+}
+
+message ApiResponseProduct {
+  string status = 1;
+  string message = 2;
+  ProductResponse data = 3;
+}
+
+message ApiResponseProductDeleteAt {
+  string status = 1;
+  string message = 2;
+  ProductResponseDeleteAt data = 3;
+}

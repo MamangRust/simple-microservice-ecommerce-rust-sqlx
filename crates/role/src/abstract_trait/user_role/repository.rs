@@ -1,0 +1,27 @@
+use anyhow::Result;
+use async_trait::async_trait;
+use std::sync::Arc;
+
+use crate::{
+    domain::requests::user_role::{CreateUserRoleRequest, RemoveUserRoleRequest},
+    model::user_role::UserRole as UserRoleModel,
+};
+use shared::errors::RepositoryError;
+
+pub type DynUserRoleCommandRepository = Arc<dyn UserRoleCommandRepositoryTrait + Send + Sync>;
+
+#[async_trait]
+pub trait UserRoleCommandRepositoryTrait {
+    async fn assign_role_to_user(
+        &self,
+        create_user_role_request: &CreateUserRoleRequest,
+    ) -> Result<UserRoleModel, RepositoryError>;
+    async fn update_role_to_user(
+        &self,
+        create_user_role_request: &CreateUserRoleRequest,
+    ) -> Result<UserRoleModel, RepositoryError>;
+    async fn remove_role_from_user(
+        &self,
+        remove_user_role_request: &RemoveUserRoleRequest,
+    ) -> Result<(), RepositoryError>;
+}

@@ -1,0 +1,38 @@
+[package]
+name = "auth"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+sqlx.workspace = true
+bcrypt.workspace = true
+rdkafka.workspace = true
+jsonwebtoken.workspace = true
+shared.workspace = true
+async-trait.workspace = true
+axum.workspace = true
+genproto.workspace = true
+validator.workspace = true
+utoipa.workspace = true
+anyhow.workspace = true
+tonic.workspace = true
+tokio.workspace = true
+serde.workspace = true
+chrono.workspace = true
+opentelemetry.workspace = true
+opentelemetry-appender-tracing.workspace = true
+opentelemetry_sdk.workspace = true
+opentelemetry-stdout.workspace = true
+opentelemetry-otlp.workspace = true
+redis.workspace = true
+tracing.workspace = true
+serde_json.workspace = true
+dotenv.workspace = true
+prometheus-client.workspace = true
+prometheus-client-derive-encode.workspace = true
+
+[features]
+vendored-openssl = []
+
+[target.'cfg(target_env = "musl")'.dependencies]
+openssl.workspace = true

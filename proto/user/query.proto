@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package user;
+
+import "api.proto";
+import "user/common.proto";
+
+message FindAllUserRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+  string search = 3;
+}
+
+message FindByEmailUserRequest { string email = 1; }
+
+message VerifyCodeRequest { string code = 1; }
+
+message ApiResponsePaginationUserDeleteAt {
+  string status = 1;
+  string message = 2;
+  repeated user.UserResponseDeleteAt data = 3;
+  api.Pagination pagination = 4;
+}
+
+message ApiResponsePaginationUser {
+  string status = 1;
+  string message = 2;
+  repeated user.UserResponse data = 3;
+  api.Pagination pagination = 4;
+}
+
+service UserQueryService {
+  rpc FindAll(FindAllUserRequest) returns (ApiResponsePaginationUser);
+  rpc FindById(user.FindByIdUserRequest) returns (user.ApiResponseUser);
+
+  rpc FindByActive(FindAllUserRequest)
+      returns (ApiResponsePaginationUserDeleteAt) {}
+  rpc FindByTrashed(FindAllUserRequest)
+      returns (ApiResponsePaginationUserDeleteAt) {}
+
+  rpc FindByEmail(FindByEmailUserRequest) returns (user.ApiResponseUser);
+  rpc FindByEmailAndVerify(FindByEmailUserRequest)
+      returns (user.ApiResponseUserWithPassword);
+  rpc FindVerificationCode(VerifyCodeRequest) returns (ApiResponseUser);
+}

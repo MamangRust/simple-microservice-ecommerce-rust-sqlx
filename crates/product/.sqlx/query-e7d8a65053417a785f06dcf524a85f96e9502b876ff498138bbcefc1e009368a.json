@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE products SET deleted_at = NULL WHERE deleted_at IS NOT NULL\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "e7d8a65053417a785f06dcf524a85f96e9502b876ff498138bbcefc1e009368a"
+}

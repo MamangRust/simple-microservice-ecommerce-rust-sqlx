@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package api;
+
+message Pagination {
+  int32 current_page = 1;
+  int32 page_size = 2;
+  int32 total_pages = 3;
+  int32 total_records = 4;
+}
+
+message ErrorResponse {
+  string status = 1;
+  string message = 2;
+  int32 code = 3;
+}

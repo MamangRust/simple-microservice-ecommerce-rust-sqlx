@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package common;
+
+message CreateUserRequest {
+  string firstname = 1;
+  string lastname = 2;
+  string email = 3;
+  string password = 4;
+  string confirm_password = 5;
+  string verified_code = 6;
+  bool is_verified = 7;
+}
+
+message RegisterRequest {
+  string firstname = 1;
+  string lastname = 2;
+  string email = 3;
+  string password = 4;
+  string confirm_password = 5;
+}

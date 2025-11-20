@@ -1,0 +1,84 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                user_id, firstname, lastname, email,\n                password, verification_code, is_verified,\n                created_at, updated_at, deleted_at,\n                COUNT(*) OVER() AS total_count\n            FROM users\n            WHERE deleted_at IS NOT NULL\n              AND (\n                $1::TEXT IS NULL OR\n                firstname ILIKE '%' || $1 || '%' OR\n                lastname ILIKE '%' || $1 || '%' OR\n                email ILIKE '%' || $1 || '%'\n              )\n            ORDER BY deleted_at DESC\n            LIMIT $2 OFFSET $3\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "firstname",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "lastname",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "email",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "password",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "verification_code",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "is_verified",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 8,
+        "name": "updated_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 9,
+        "name": "deleted_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 10,
+        "name": "total_count",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      null
+    ]
+  },
+  "hash": "6db89850a2659ecfb1e3bf6e2d2cf2ac33b84bf75640c345ed42f26f6fdf80eb"
+}

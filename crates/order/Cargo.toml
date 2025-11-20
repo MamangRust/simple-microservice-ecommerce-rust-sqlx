@@ -1,0 +1,35 @@
+[package]
+name = "order"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+shared.workspace = true
+dotenv.workspace = true
+genproto.workspace = true
+anyhow.workspace = true
+tonic.workspace = true
+async-trait.workspace = true
+sqlx.workspace = true
+utoipa.workspace = true
+tokio.workspace = true
+chrono.workspace = true
+axum.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+validator.workspace = true
+prometheus-client.workspace = true
+prometheus-client-derive-encode.workspace = true
+rdkafka.workspace = true
+opentelemetry.workspace = true
+opentelemetry-appender-tracing.workspace = true
+opentelemetry_sdk.workspace = true
+opentelemetry-stdout.workspace = true
+opentelemetry-otlp.workspace = true
+
+[features]
+vendored-openssl = []
+
+[target.'cfg(target_env = "musl")'.dependencies]
+openssl.workspace = true

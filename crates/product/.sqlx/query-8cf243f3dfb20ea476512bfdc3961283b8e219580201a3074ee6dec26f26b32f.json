@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM products\n            WHERE product_id = $1 AND deleted_at IS NOT NULL\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8cf243f3dfb20ea476512bfdc3961283b8e219580201a3074ee6dec26f26b32f"
+}

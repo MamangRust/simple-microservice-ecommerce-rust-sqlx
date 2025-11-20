@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package product;
+
+import "google/protobuf/empty.proto";
+import "product/common.proto";
+
+message CreateProductRequest {
+  string name = 1;
+  int64 price = 2;
+  int32 stock = 3;
+}
+
+message UpdateProductRequest {
+  int32 id = 1;
+  string name = 2;
+  int64 price = 3;
+  int32 stock = 4;
+}
+
+message UpdateProductStockRequest {
+  int32 id = 1;
+  int32 stock = 2;
+}
+
+message ApiResponseProductDelete {
+  string status = 1;
+  string message = 2;
+}
+
+message ApiResponseProductAll {
+  string status = 1;
+  string message = 2;
+}
+
+service ProductCommandService {
+  rpc Create(CreateProductRequest) returns (product.ApiResponseProduct);
+  rpc Update(UpdateProductRequest) returns (product.ApiResponseProduct);
+
+  rpc Trashed(product.FindByIdProductRequest)
+      returns (product.ApiResponseProductDeleteAt);
+  rpc Restore(product.FindByIdProductRequest)
+      returns (product.ApiResponseProductDeleteAt);
+  rpc DeleteProductPermanent(product.FindByIdProductRequest)
+      returns (product.ApiResponseProductDelete);
+
+  rpc RestoreAllProduct(google.protobuf.Empty) returns (ApiResponseProductAll);
+  rpc DeleteAllProduct(google.protobuf.Empty) returns (ApiResponseProductAll);
+}

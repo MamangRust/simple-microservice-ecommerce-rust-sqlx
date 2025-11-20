@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package product;
+
+import "api.proto";
+import "product/common.proto";
+
+message FindAllProductRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+  string search = 3;
+}
+
+message ApiResponsePaginationProductDeleteAt {
+  string status = 1;
+  string message = 2;
+  repeated product.ProductResponseDeleteAt data = 3;
+  api.Pagination pagination = 4;
+}
+
+message ApiResponsePaginationProduct {
+  string status = 1;
+  string message = 2;
+  repeated product.ProductResponse data = 3;
+  api.Pagination pagination = 4;
+}
+
+service ProductQueryService {
+  rpc FindAll(FindAllProductRequest) returns (ApiResponsePaginationProduct);
+  rpc FindById(product.FindByIdProductRequest)
+      returns (product.ApiResponseProduct);
+
+  rpc FindByActive(FindAllProductRequest)
+      returns (ApiResponsePaginationProductDeleteAt);
+  rpc FindByTrashed(FindAllProductRequest)
+      returns (ApiResponsePaginationProductDeleteAt);
+}

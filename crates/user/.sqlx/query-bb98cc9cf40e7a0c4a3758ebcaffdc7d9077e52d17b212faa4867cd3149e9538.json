@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE users SET deleted_at = NULL WHERE deleted_at IS NOT NULL\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "bb98cc9cf40e7a0c4a3758ebcaffdc7d9077e52d17b212faa4867cd3149e9538"
+}

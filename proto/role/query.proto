@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package role;
+
+import "api.proto";
+import "role/common.proto";
+
+message FindByNameRequest { string name = 1; }
+
+message ApiResponsePaginationRole {
+  string status = 1;
+  string message = 2;
+  repeated RoleResponse data = 3;
+  api.Pagination pagination = 4;
+}
+
+message ApiResponsePaginationRoleDeleteAt {
+  string status = 1;
+  string message = 2;
+  repeated RoleResponseDeleteAt data = 3;
+  api.Pagination pagination = 4;
+}
+
+service RoleQueryService {
+  rpc FindAllRole(FindAllRoleRequest) returns (ApiResponsePaginationRole) {}
+  rpc FindByName(FindByNameRequest) returns (ApiResponseRole) {}
+  rpc FindByIdRole(FindByIdRoleRequest) returns (ApiResponseRole) {}
+
+  rpc FindByActive(FindAllRoleRequest)
+      returns (ApiResponsePaginationRoleDeleteAt) {}
+  rpc FindByTrashed(FindAllRoleRequest)
+      returns (ApiResponsePaginationRoleDeleteAt) {}
+
+  rpc FindByUserId(FindByIdUserRoleRequest) returns (ApiResponsesRole) {}
+}

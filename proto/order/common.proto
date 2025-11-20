@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package order;
+
+import "google/protobuf/wrappers.proto";
+
+message FindByIdOrderRequest { int32 id = 1; }
+
+message OrderResponse {
+  int32 id = 1;
+  int32 user_id = 2;
+  int32 total_price = 3;
+  string created_at = 4;
+  string updated_at = 5;
+}
+
+message OrderResponseDeleteAt {
+  int32 id = 1;
+  int32 user_id = 2;
+  int32 total_price = 3;
+  string created_at = 4;
+  string updated_at = 5;
+  google.protobuf.StringValue deleted_at = 6;
+}
+
+message ApiResponseOrder {
+  string status = 1;
+  string message = 2;
+  OrderResponse data = 3;
+}
+
+message ApiResponseOrderDeleteAt {
+  string status = 1;
+  string message = 2;
+  OrderResponseDeleteAt data = 3;
+}

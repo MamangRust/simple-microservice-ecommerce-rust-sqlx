@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package user;
+
+import "google/protobuf/empty.proto";
+import "user/common.proto";
+import "common/common.proto";
+
+message UpdateUserVerifiedRequest {
+  int32 user_id = 1;
+  bool is_verified = 2;
+}
+
+message UpdateUserPasswordRequest {
+  int32 user_id = 1;
+  string password = 2;
+}
+
+message UpdateUserRequest {
+  int32 id = 1;
+  string firstname = 2;
+  string lastname = 3;
+  string email = 4;
+  string password = 5;
+  string confirm_password = 6;
+}
+
+message ApiResponseUserDelete {
+  string status = 1;
+  string message = 2;
+}
+
+message ApiResponseUserAll {
+  string status = 1;
+  string message = 2;
+}
+
+service UserCommandService {
+  rpc CreateUser(common.CreateUserRequest) returns (user.ApiResponseUser);
+  rpc UpdateUser(UpdateUserRequest) returns (user.ApiResponseUser);
+  rpc TrashedUser(FindByIdUserRequest) returns (user.ApiResponseUserDeleteAt);
+  rpc RestoreUser(FindByIdUserRequest) returns (user.ApiResponseUserDeleteAt);
+  rpc DeleteUserPermanent(FindByIdUserRequest) returns (ApiResponseUserDelete);
+
+  rpc UpdateUserIsVerified(UpdateUserVerifiedRequest) returns (ApiResponseUser);
+  rpc UpdateUserPassword(UpdateUserPasswordRequest) returns (ApiResponseUser);
+
+  rpc RestoreAllUser(google.protobuf.Empty) returns (ApiResponseUserAll) {}
+  rpc DeleteAllUserPermanent(google.protobuf.Empty)
+      returns (ApiResponseUserAll) {}
+}

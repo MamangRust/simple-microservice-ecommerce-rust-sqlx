@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package user_role;
+
+message CreateUserRoleRequest {
+  int32 userid = 1;
+  int32 roleid = 2;
+}
+
+message UserRoleResponse {
+  int32 userid = 1;
+  int32 roleid = 2;
+}
+
+message ApiResponseUserRole {
+  string status = 1;
+  string message = 2;
+  UserRoleResponse data = 3;
+}
+
+service UserRoleService {
+  rpc AssignRole(CreateUserRoleRequest) returns (ApiResponseUserRole);
+  rpc UpdateRole(CreateUserRoleRequest) returns (ApiResponseUserRole);
+}

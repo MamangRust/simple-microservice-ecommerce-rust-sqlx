@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE orders SET deleted_at = NULL WHERE deleted_at IS NOT NULL\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "abbdf6df2f6d9d437b1aa6cbb380c0503e03864c4f3ff4a94efafea9d349cef1"
+}
