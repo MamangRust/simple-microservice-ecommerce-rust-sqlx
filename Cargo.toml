@@ -3,6 +3,12 @@ members = [
   "crates/apigateway",
   "crates/shared",
   "crates/genproto",
+  "crates/auth",
+  "crates/email",
+  "crates/order",
+  "crates/product",
+  "crates/role",
+  "crates/user",
 ]
 resolver = "3"
 
