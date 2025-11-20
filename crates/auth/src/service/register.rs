@@ -205,17 +205,21 @@ impl RegisterServiceTrait for RegisterService {
 
         let email_check = self.user_client.find_by_email(req.email.clone()).await;
 
-        if email_check.is_ok() {
-            self.complete_tracing_error(&tracing_ctx, method, "Email already exists")
-                .await;
-            return Err(ServiceError::Custom("Email already registered".into()));
-        }
-
-        if let Err(e) = email_check {
-            error!("❌ gRPC error checking email: {:?}", e);
-            self.complete_tracing_error(&tracing_ctx, method, "User query failed")
-                .await;
-            return Err(ServiceError::Internal("Database error".into()));
+        match email_check {
+            Ok(_) => {
+                self.complete_tracing_error(&tracing_ctx, method, "Email already exists")
+                    .await;
+                return Err(ServiceError::Custom("Email already registered".into()));
+            }
+            Err(e) => {
+                if e.to_string().contains("User not found") {
+                } else {
+                    error!("gRPC error checking email: {:?}", e);
+                    self.complete_tracing_error(&tracing_ctx, method, "User query failed")
+                        .await;
+                    return Err(ServiceError::Internal("Database error".into()));
+                }
+            }
         }
 
         let verification_code = generate_random_string(10)
