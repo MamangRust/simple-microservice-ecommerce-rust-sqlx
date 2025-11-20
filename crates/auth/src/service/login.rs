@@ -237,7 +237,7 @@ impl LoginServiceTrait for LoginService {
 
         self.cache_store.delete_from_cache(&attempts_key);
 
-        let uid = user.id as i32;
+        let uid = user.id;
 
         let access_token = match self.token_service.create_access_token(uid).await {
             Ok(t) => t,
