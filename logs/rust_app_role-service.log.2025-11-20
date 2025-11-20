@@ -1,0 +1,17 @@
+{"timestamp":"2025-11-20T13:09:14.910357Z","level":"INFO","fields":{"message":"🚀 Starting Role Service initialization..."},"target":"role"}
+{"timestamp":"2025-11-20T13:09:14.960663Z","level":"INFO","fields":{"message":"relation \"_sqlx_migrations\" already exists, skipping"},"target":"sqlx::postgres::notice"}
+{"timestamp":"2025-11-20T13:09:14.979153Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T13:09:14.980204Z","level":"INFO","fields":{"message":"Pinging redis"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T13:09:14.980336Z","level":"INFO","fields":{"message":"Pinged redis"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T13:09:14.980527Z","level":"INFO","fields":{"message":"🔧 Starting metrics server on 0.0.0.0:8082"},"target":"role"}
+{"timestamp":"2025-11-20T13:09:14.980536Z","level":"INFO","fields":{"message":"📡 Starting gRPC server on 0.0.0.0:50053"},"target":"role"}
+{"timestamp":"2025-11-20T13:09:14.980567Z","level":"INFO","fields":{"message":"Starting metrics server on 0.0.0.0:8082"},"target":"role"}
+{"timestamp":"2025-11-20T13:09:15.750209Z","level":"INFO","fields":{"message":"Starting server role initialization..."},"target":"order"}
+{"timestamp":"2025-11-20T13:09:15.803438Z","level":"INFO","fields":{"message":"relation \"_sqlx_migrations\" already exists, skipping"},"target":"sqlx::postgres::notice"}
+{"timestamp":"2025-11-20T13:09:15.815462Z","level":"INFO","fields":{"message":"Kafka producer connected successfully"},"target":"shared::config::kafka"}
+{"timestamp":"2025-11-20T13:09:15.815494Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T13:09:15.816652Z","level":"INFO","fields":{"message":"Pinging redis"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T13:09:15.816778Z","level":"INFO","fields":{"message":"Pinged redis"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T13:09:15.818064Z","level":"INFO","fields":{"message":"🔧 Starting metrics server on 0.0.0.0:8084"},"target":"order"}
+{"timestamp":"2025-11-20T13:09:15.818047Z","level":"INFO","fields":{"message":"Starting gRPC server on 0.0.0.0:50055"},"target":"order"}
+{"timestamp":"2025-11-20T13:09:15.818117Z","level":"INFO","fields":{"message":"Starting metrics server on 0.0.0.0:8084"},"target":"order"}

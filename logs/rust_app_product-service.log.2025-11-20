@@ -1,0 +1,10 @@
+{"timestamp":"2025-11-20T13:09:14.836559Z","level":"INFO","fields":{"message":"🚀 Starting Product Service initialization..."},"target":"product"}
+{"timestamp":"2025-11-20T13:09:14.876226Z","level":"INFO","fields":{"message":"relation \"_sqlx_migrations\" already exists, skipping"},"target":"sqlx::postgres::notice"}
+{"timestamp":"2025-11-20T13:09:14.890008Z","level":"INFO","fields":{"message":"Creating redis client"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T13:09:14.891072Z","level":"INFO","fields":{"message":"Pinging redis"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T13:09:14.891218Z","level":"INFO","fields":{"message":"Pinged redis"},"target":"shared::config::redis"}
+{"timestamp":"2025-11-20T13:09:14.891385Z","level":"INFO","fields":{"message":"📡 Starting gRPC server on 0.0.0.0:50054"},"target":"product"}
+{"timestamp":"2025-11-20T13:09:14.891390Z","level":"INFO","fields":{"message":"🔧 Starting metrics server on 0.0.0.0:8083"},"target":"product"}
+{"timestamp":"2025-11-20T13:09:14.891519Z","level":"INFO","fields":{"message":"📊 Creating metrics server on 0.0.0.0:8083"},"target":"product"}
+{"timestamp":"2025-11-20T13:09:14.891611Z","level":"INFO","fields":{"message":"✅ Metrics server bound to 0.0.0.0:8083"},"target":"product"}
+{"timestamp":"2025-11-20T13:09:14.893152Z","level":"INFO","fields":{"message":"✅ Kafka consumer started, subscribed to order events"},"target":"product::kafka::kafka_consumer"}

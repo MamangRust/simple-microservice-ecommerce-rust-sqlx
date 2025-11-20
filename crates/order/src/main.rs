@@ -33,16 +33,16 @@ async fn main() -> Result<()> {
 
     let server_config = ServerConfig::from_config(&config)?;
 
-    let telemetry = Telemetry::new("role-service", "http://otel-collector:4317".to_string());
+    let telemetry = Telemetry::new("order-service", "http://otel-collector:4317".to_string());
 
     let logger_provider = telemetry.init_logger();
 
     let _meter_provider = telemetry.init_meter();
     let _tracer_provider = telemetry.init_tracer();
 
-    init_logger(logger_provider.clone(), "role-service");
+    init_logger(logger_provider.clone(), "order-service");
 
-    info!("Starting server role initialization...");
+    info!("Starting server order initialization...");
 
     let db_pool = ConnectionManager::new_pool(&server_config.database_url)
         .await
