@@ -525,7 +525,7 @@ impl OrderGrpcClientTrait for OrderGrpcClientService {
         }
 
         let request = Request::new(UpdateOrderRequest {
-            order_id: order_id,
+            order_id,
             user_id: req.user_id,
             items: req
                 .items
