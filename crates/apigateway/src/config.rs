@@ -53,7 +53,6 @@ pub struct Config {
     pub role: ServiceConfig,
     pub product: ServiceConfig,
     pub order: ServiceConfig,
-    pub email_config: EmailConfig,
     pub kafka_broker: String,
 }
 impl Config {
@@ -138,8 +137,6 @@ impl Config {
             .parse::<u16>()
             .context("ORDER_METRIC_PORT must be a valid u16 integer")?;
 
-        let email_config = EmailConfig::init().context("failed email config")?;
-
         Ok(Self {
             database_url,
             jwt_secret,
@@ -165,7 +162,6 @@ impl Config {
                 grpc_port: order_grpc_port,
                 metric_port: order_metric_port,
             },
-            email_config,
             kafka_broker,
         })
     }

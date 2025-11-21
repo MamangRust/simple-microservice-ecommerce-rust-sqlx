@@ -10,12 +10,16 @@ use crate::{
     },
 };
 use crate::{
-    middleware::{jwt, validate::SimpleValidatedJson},
+    middleware::{
+        jwt::auth_middleware, rate_limit::rate_limit_middleware, session::session_middleware,
+        validate::SimpleValidatedJson,
+    },
     state::AppState,
 };
 use axum::{
     Extension, Json,
     extract::Query,
+    http::StatusCode,
     middleware,
     response::IntoResponse,
     routing::{get, post},
@@ -24,13 +28,16 @@ use shared::errors::HttpError;
 use std::sync::Arc;
 use utoipa_axum::router::OpenApiRouter;
 
-pub async fn health_checker_handler() -> impl IntoResponse {
+pub async fn health_checker_handler() -> Result<impl IntoResponse, HttpError> {
     const MESSAGE: &str = "JWT Authentication in Rust using Axum, Postgres, and SQLX";
 
-    axum::Json(serde_json::json!({
-        "status": "success",
-        "message": MESSAGE
-    }))
+    Ok((
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "status": "success",
+            "message": MESSAGE
+        })),
+    ))
 }
 
 #[utoipa::path(
@@ -48,7 +55,7 @@ pub async fn login_user_handler(
     SimpleValidatedJson(body): SimpleValidatedJson<AuthRequest>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.login_user(&body).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -66,7 +73,7 @@ pub async fn register_user_handler(
     SimpleValidatedJson(body): SimpleValidatedJson<RegisterRequest>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.register_user(&body).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -84,7 +91,7 @@ pub async fn forgot_password_handler(
     Json(email): Json<String>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.forgot(&email).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -102,7 +109,7 @@ pub async fn reset_password_handler(
     SimpleValidatedJson(body): SimpleValidatedJson<CreateResetPasswordRequest>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.reset_password(&body).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -122,7 +129,7 @@ pub async fn verify_code_handler(
     Query(query): Query<VerifyCodeQuery>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.verify_code(&query.verify_code).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -140,7 +147,7 @@ pub async fn refresh_token_handler(
     Json(token): Json<String>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.refresh_token(&token).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -159,7 +166,7 @@ pub async fn get_me_handler(
     Extension(user_id): Extension<i32>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.get_me(user_id).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 pub fn auth_routes(app_state: Arc<AppState>) -> OpenApiRouter {
@@ -175,8 +182,13 @@ pub fn auth_routes(app_state: Arc<AppState>) -> OpenApiRouter {
         .route("/api/auth/forgot-password", post(forgot_password_handler))
         .route("/api/auth/reset-password", post(reset_password_handler))
         .route("/api/auth/refresh", post(refresh_token_handler))
-        .route_layer(middleware::from_fn(jwt::auth))
+        .route_layer(middleware::from_fn(session_middleware))
+        .route_layer(middleware::from_fn(auth_middleware))
+        .route_layer(middleware::from_fn(rate_limit_middleware))
         .layer(Extension(app_state.di_container.auth_clients.clone()))
+        .layer(Extension(app_state.di_container.role_clients.clone()))
+        .layer(Extension(app_state.rate_limit.clone()))
+        .layer(Extension(app_state.session.clone()))
         .layer(Extension(app_state.jwt_config.clone()));
 
     public_routes.merge(private_routes).with_state(app_state)

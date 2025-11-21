@@ -1,10 +1,7 @@
 use anyhow::{Context, Result};
-use apigateway::{handler::AppRouter, state::AppState};
+use apigateway::{config::Config, handler::AppRouter, state::AppState};
 use dotenv::dotenv;
-use shared::{
-    config::Config,
-    utils::{Telemetry, init_logger},
-};
+use shared::utils::{Telemetry, init_logger};
 use tracing::info;
 
 #[tokio::main]

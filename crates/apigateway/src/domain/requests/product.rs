@@ -39,7 +39,7 @@ pub struct CreateProductRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 pub struct UpdateProductRequest {
-    pub id: i32,
+    pub id: Option<i32>,
 
     #[validate(length(min = 1, message = "Name is required"))]
     #[schema(example = "Smartphone")]

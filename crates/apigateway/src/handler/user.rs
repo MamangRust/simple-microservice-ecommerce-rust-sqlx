@@ -9,12 +9,16 @@ use crate::{
     },
 };
 use crate::{
-    middleware::{jwt, validate::SimpleValidatedJson},
+    middleware::{
+        jwt::auth_middleware, rate_limit::rate_limit_middleware, session::session_middleware,
+        validate::SimpleValidatedJson,
+    },
     state::AppState,
 };
 use axum::{
     Json,
     extract::{Extension, Path, Query},
+    http::StatusCode,
     middleware,
     response::IntoResponse,
     routing::{delete, get, put},
@@ -41,7 +45,7 @@ pub async fn get_users(
     Query(params): Query<FindAllUsers>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.find_all(&params).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -61,7 +65,7 @@ pub async fn get_active_users(
     Query(params): Query<FindAllUsers>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.find_active(&params).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -81,7 +85,7 @@ pub async fn get_trashed_users(
     Query(params): Query<FindAllUsers>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.find_trashed(&params).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -102,7 +106,7 @@ pub async fn get_user(
     Extension(_user_id): Extension<i64>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.find_by_id(id).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -126,7 +130,7 @@ pub async fn update_user(
 ) -> Result<impl IntoResponse, HttpError> {
     body.user_id = Some(id);
     let response = service.update_user(&body).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -146,7 +150,7 @@ pub async fn trash_user_handler(
     Path(id): Path<i32>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.trash_user(id).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -166,7 +170,7 @@ pub async fn restore_user_handler(
     Path(id): Path<i32>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.restore_user(id).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -186,10 +190,14 @@ pub async fn delete_user(
     Path(id): Path<i32>,
 ) -> Result<impl IntoResponse, HttpError> {
     service.delete_user(id).await?;
-    Ok(Json(json!({
-        "status": "success",
-        "message": "User deleted permanently"
-    })))
+
+    Ok((
+        StatusCode::OK,
+        Json(json!({
+            "status": "success",
+            "message": "User deleted permanently"
+        })),
+    ))
 }
 
 #[utoipa::path(
@@ -206,10 +214,14 @@ pub async fn restore_all_user_handler(
     Extension(service): Extension<DynUserGrpcClient>,
 ) -> Result<impl IntoResponse, HttpError> {
     service.restore_all_user().await?;
-    Ok(Json(json!({
-        "status": "success",
-        "message": "All users restored successfully"
-    })))
+
+    Ok((
+        StatusCode::OK,
+        Json(json!({
+            "status": "success",
+            "message": "All users restored successfully"
+        })),
+    ))
 }
 
 #[utoipa::path(
@@ -226,10 +238,14 @@ pub async fn delete_all_user_handler(
     Extension(service): Extension<DynUserGrpcClient>,
 ) -> Result<impl IntoResponse, HttpError> {
     service.delete_all_user().await?;
-    Ok(Json(json!({
-        "status": "success",
-        "message": "All trashed users deleted permanently"
-    })))
+
+    Ok((
+        StatusCode::OK,
+        Json(json!({
+            "status": "success",
+            "message": "All users trashed successfully"
+        })),
+    ))
 }
 
 pub fn user_routes(app_state: Arc<AppState>) -> OpenApiRouter {
@@ -244,7 +260,12 @@ pub fn user_routes(app_state: Arc<AppState>) -> OpenApiRouter {
         .route("/api/users/restore-all", put(restore_all_user_handler))
         .route("/api/users/delete/{id}", delete(delete_user))
         .route("/api/users/delete-all", delete(delete_all_user_handler))
-        .route_layer(middleware::from_fn(jwt::auth))
+        .route_layer(middleware::from_fn(session_middleware))
+        .route_layer(middleware::from_fn(auth_middleware))
+        .route_layer(middleware::from_fn(rate_limit_middleware))
         .layer(Extension(app_state.di_container.user_clients.clone()))
+        .layer(Extension(app_state.di_container.role_clients.clone()))
+        .layer(Extension(app_state.rate_limit.clone()))
+        .layer(Extension(app_state.session.clone()))
         .layer(Extension(app_state.jwt_config.clone()))
 }

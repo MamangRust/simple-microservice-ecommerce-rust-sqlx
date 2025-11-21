@@ -1,16 +1,13 @@
 use anyhow::Context;
-use email::app::EmailServiceApp;
-use shared::{
-    config::Config,
-    utils::{Telemetry, init_logger, shutdown_signal},
-};
+use email::{app::EmailServiceApp, config::MyConfigConfig};
+use shared::utils::{Telemetry, init_logger, shutdown_signal};
 use tracing::info;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
 
-    let config = Config::init().context("failed to load config")?;
+    let config = MyConfigConfig::init().context("failed to load config")?;
 
     let telemetry = Telemetry::new("email-service", "http://otel-collector:4317".to_string());
     let logger_provider = telemetry.init_logger();
@@ -20,7 +17,7 @@ async fn main() -> anyhow::Result<()> {
 
     init_logger(logger_provider.clone(), "email-service");
 
-    let app = EmailServiceApp::new(config.email_config, &config.kafka_broker).await?;
+    let app = EmailServiceApp::new(config).await?;
 
     app.run().await?;
 

@@ -8,10 +8,16 @@ use crate::{
         },
     },
 };
-use crate::{middleware::jwt, state::AppState};
+use crate::{
+    middleware::{
+        jwt::auth_middleware, rate_limit::rate_limit_middleware, session::session_middleware,
+    },
+    state::AppState,
+};
 use axum::{
     Json,
     extract::{Extension, Path, Query},
+    http::StatusCode,
     middleware,
     response::IntoResponse,
     routing::get,
@@ -37,7 +43,7 @@ pub async fn get_order_items(
     Query(params): Query<FindAllOrderItems>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.find_all(&params).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -57,7 +63,7 @@ pub async fn get_active_order_items(
     Query(params): Query<FindAllOrderItems>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.find_by_active(&params).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -77,7 +83,7 @@ pub async fn get_trashed_order_items(
     Query(params): Query<FindAllOrderItems>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.find_by_trashed(&params).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -100,7 +106,7 @@ pub async fn get_items_by_order_id(
     Path(order_id): Path<i32>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.find_order_item_by_order(order_id).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 pub fn order_item_routes(app_state: Arc<AppState>) -> OpenApiRouter {
@@ -109,7 +115,12 @@ pub fn order_item_routes(app_state: Arc<AppState>) -> OpenApiRouter {
         .route("/api/order-items/active", get(get_active_order_items))
         .route("/api/order-items/trashed", get(get_trashed_order_items))
         .route("/api/order-items/{order_item}", get(get_items_by_order_id))
-        .route_layer(middleware::from_fn(jwt::auth))
+        .route_layer(middleware::from_fn(session_middleware))
+        .route_layer(middleware::from_fn(auth_middleware))
+        .route_layer(middleware::from_fn(rate_limit_middleware))
         .layer(Extension(app_state.di_container.order_clients.clone()))
+        .layer(Extension(app_state.di_container.role_clients.clone()))
+        .layer(Extension(app_state.rate_limit.clone()))
+        .layer(Extension(app_state.session.clone()))
         .layer(Extension(app_state.jwt_config.clone()))
 }

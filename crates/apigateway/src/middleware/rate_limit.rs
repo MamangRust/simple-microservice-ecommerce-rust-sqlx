@@ -1,3 +1,4 @@
+use crate::abstract_trait::rate_limit::DynRateLimitMiddleware;
 use axum::{
     Extension, Json,
     body::Body,
@@ -5,12 +6,11 @@ use axum::{
     middleware::Next,
     response::IntoResponse,
 };
-use shared::{cache::RateLimiter, errors::ErrorResponse};
-use std::sync::Arc;
+use shared::errors::ErrorResponse;
 use tracing::warn;
 
-pub async fn rate_limit(
-    Extension(rate_limiter): Extension<Arc<RateLimiter>>,
+pub async fn rate_limit_middleware(
+    Extension(rate_limiter): Extension<DynRateLimitMiddleware>,
     req: Request<Body>,
     next: Next,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {

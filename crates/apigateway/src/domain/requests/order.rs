@@ -28,7 +28,7 @@ pub struct CreateOrderRequest {
 #[derive(Debug, Serialize, Deserialize, Validate, ToSchema)]
 pub struct UpdateOrderRequest {
     #[serde(rename = "order_id")]
-    pub order_id: i32,
+    pub order_id: Option<i32>,
 
     #[validate(range(min = 1))]
     #[serde(rename = "user_id")]

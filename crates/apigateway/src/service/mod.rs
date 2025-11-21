@@ -12,8 +12,8 @@ pub use self::product::ProductGrpcClientService;
 pub use self::role::RoleGrpcClientService;
 pub use self::user::UserGrpcClientService;
 
+use crate::config::GrpcClientConfig;
 use anyhow::{Context, Result};
-use shared::config::GrpcClientConfig;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::transport::{Channel, Endpoint};

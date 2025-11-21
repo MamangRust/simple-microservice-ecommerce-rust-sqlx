@@ -1,10 +1,15 @@
-use crate::{di::DependenciesInject, service::GrpcClients};
+use crate::{
+    abstract_trait::{rate_limit::DynRateLimitMiddleware, session::DynSessionMiddleware},
+    cache::{rate_limit::RateLimiter, session::SessionStore},
+    config::GrpcClientConfig,
+    di::DependenciesInject,
+    service::GrpcClients,
+};
 use anyhow::{Context, Result};
 use prometheus_client::registry::Registry;
 use shared::{
     abstract_trait::DynJwtService,
-    cache::RateLimiter,
-    config::{GrpcClientConfig, JwtConfig, RedisClient, RedisConfig},
+    config::{JwtConfig, RedisClient, RedisConfig},
     utils::{Metrics, SystemMetrics, run_metrics_collector},
 };
 use std::sync::Arc;
@@ -14,11 +19,12 @@ use tracing::info;
 #[derive(Clone)]
 pub struct AppState {
     pub jwt_config: DynJwtService,
+    pub rate_limit: DynRateLimitMiddleware,
+    pub session: DynSessionMiddleware,
     pub di_container: DependenciesInject,
     pub registry: Arc<Mutex<Registry>>,
     pub metrics: Arc<Mutex<Metrics>>,
     pub system_metrics: Arc<SystemMetrics>,
-    pub rate_limiter: Arc<RateLimiter>,
     pub redis: Arc<RedisClient>,
 }
 
@@ -38,7 +44,11 @@ impl AppState {
 
         redis.ping().context("Failed to ping Redis server")?;
 
-        let rate_limiter = Arc::new(RateLimiter::new(redis.client.clone()));
+        let rate_limiter_middleware =
+            Arc::new(RateLimiter::new(redis.client.clone())) as DynRateLimitMiddleware;
+
+        let session_middleware =
+            Arc::new(SessionStore::new(redis.client.clone())) as DynSessionMiddleware;
 
         let clients = GrpcClients::init(grpc_config)
             .await
@@ -60,7 +70,8 @@ impl AppState {
             registry,
             metrics,
             system_metrics,
-            rate_limiter,
+            rate_limit: rate_limiter_middleware,
+            session: session_middleware,
             redis: Arc::new(redis),
         })
     }

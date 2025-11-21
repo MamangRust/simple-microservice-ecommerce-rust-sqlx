@@ -1,23 +1,20 @@
 use crate::{
     abstract_trait::DynEmailService,
+    config::MyConfigConfig,
     handler::EmailHandler,
     service::{EmailService, KafkaEmailService},
 };
-use shared::{config::EmailConfig, errors::ServiceError};
+use shared::errors::ServiceError;
 use std::sync::Arc;
 use tracing::info;
 
 pub struct EmailServiceApp {
-    config: EmailConfig,
-    kafka: String,
+    config: MyConfigConfig,
 }
 
 impl EmailServiceApp {
-    pub async fn new(config: EmailConfig, kafka: &str) -> anyhow::Result<Self> {
-        Ok(Self {
-            config,
-            kafka: kafka.to_string(),
-        })
+    pub async fn new(config: MyConfigConfig) -> anyhow::Result<Self> {
+        Ok(Self { config })
     }
 
     pub async fn run(self) -> Result<(), ServiceError> {
@@ -39,8 +36,12 @@ impl EmailServiceApp {
             "email-service-topic-auth-verify-code-success",
         ];
 
-        let kafka_service =
-            KafkaEmailService::new(&self.kafka, "email-service-group", &topics, handler)?;
+        let kafka_service = KafkaEmailService::new(
+            &self.config.kafka_broker,
+            "email-service-group",
+            &topics,
+            handler,
+        )?;
 
         info!("🚀 Starting Email Service...");
         kafka_service.start_consuming().await

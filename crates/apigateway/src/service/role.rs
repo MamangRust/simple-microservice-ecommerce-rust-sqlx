@@ -511,7 +511,11 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
         &self,
         req: &DomainUpdateRoleRequest,
     ) -> Result<ApiResponse<RoleResponse>, HttpError> {
-        info!("Updating Role: {}", req.id);
+        info!("Updating Role: {:?}", req.id);
+
+        let role_id = req
+            .id
+            .ok_or_else(|| HttpError::BadRequest("role_id is required".into()))?;
 
         let method = Method::Put;
         let tracing_ctx = self.start_tracing(
@@ -519,13 +523,13 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
             vec![
                 KeyValue::new("component", "role"),
                 KeyValue::new("operation", "update"),
-                KeyValue::new("role.id", req.id.to_string()),
+                KeyValue::new("role.id", role_id.to_string()),
                 KeyValue::new("role.name", req.name.clone()),
             ],
         );
 
         let mut request = Request::new(UpdateRoleRequest {
-            id: req.id,
+            id: role_id,
             name: req.name.clone(),
         });
 

@@ -9,7 +9,10 @@ use crate::{
     },
 };
 use crate::{
-    middleware::{jwt, validate::SimpleValidatedJson},
+    middleware::{
+        jwt::auth_middleware, rate_limit::rate_limit_middleware, session::session_middleware,
+        validate::SimpleValidatedJson,
+    },
     state::AppState,
 };
 use axum::{
@@ -42,7 +45,7 @@ pub async fn get_roles(
     Query(params): Query<FindAllRole>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.find_all(&params).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -62,7 +65,7 @@ pub async fn get_active_roles(
     Query(params): Query<FindAllRole>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.find_active(&params).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -82,7 +85,7 @@ pub async fn get_trashed_roles(
     Query(params): Query<FindAllRole>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.find_trashed(&params).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -103,7 +106,7 @@ pub async fn get_role(
     Extension(_user_id): Extension<i64>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.find_by_id(id).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -146,9 +149,9 @@ pub async fn update_role(
     Path(id): Path<i32>,
     SimpleValidatedJson(mut body): SimpleValidatedJson<UpdateRoleRequest>,
 ) -> Result<impl IntoResponse, HttpError> {
-    body.id = id;
+    body.id = Some(id);
     let response = service.update_role(&body).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -168,7 +171,7 @@ pub async fn trash_role_handler(
     Path(id): Path<i32>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.trash_role(id).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -188,7 +191,7 @@ pub async fn restore_role_handler(
     Path(id): Path<i32>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.restore_role(id).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -209,10 +212,14 @@ pub async fn delete_role(
     Extension(_user_id): Extension<i64>,
 ) -> Result<impl IntoResponse, HttpError> {
     service.delete_ole(id).await?;
-    Ok(Json(json!({
-        "status": "success",
-        "message": "Role deleted permanently"
-    })))
+
+    Ok((
+        StatusCode::OK,
+        Json(json!({
+            "status": "success",
+            "message": "Role deleted permanently"
+        })),
+    ))
 }
 
 #[utoipa::path(
@@ -229,10 +236,14 @@ pub async fn restore_all_role_handler(
     Extension(service): Extension<DynRoleGrpcClient>,
 ) -> Result<impl IntoResponse, HttpError> {
     service.restore_all_role().await?;
-    Ok(Json(json!({
-        "status": "success",
-        "message": "All roles restored successfully"
-    })))
+
+    Ok((
+        StatusCode::OK,
+        Json(json!({
+            "status": "success",
+           "message": "All roles restored successfully"
+        })),
+    ))
 }
 
 #[utoipa::path(
@@ -249,10 +260,14 @@ pub async fn delete_all_role_handler(
     Extension(service): Extension<DynRoleGrpcClient>,
 ) -> Result<impl IntoResponse, HttpError> {
     service.delete_all_role().await?;
-    Ok(Json(json!({
-        "status": "success",
-        "message": "All trashed roles deleted permanently"
-    })))
+
+    Ok((
+        StatusCode::OK,
+        Json(json!({
+            "status": "success",
+           "message": "All trashed roles deleted permanently"
+        })),
+    ))
 }
 
 pub fn roles_routes(app_state: Arc<AppState>) -> OpenApiRouter {
@@ -268,7 +283,11 @@ pub fn roles_routes(app_state: Arc<AppState>) -> OpenApiRouter {
         .route("/api/roles/restore-all", put(restore_all_role_handler))
         .route("/api/roles/delete/{id}", delete(delete_role))
         .route("/api/roles/delete-all", delete(delete_all_role_handler))
-        .route_layer(middleware::from_fn(jwt::auth))
+        .route_layer(middleware::from_fn(session_middleware))
+        .route_layer(middleware::from_fn(auth_middleware))
+        .route_layer(middleware::from_fn(rate_limit_middleware))
         .layer(Extension(app_state.di_container.role_clients.clone()))
+        .layer(Extension(app_state.rate_limit.clone()))
+        .layer(Extension(app_state.session.clone()))
         .layer(Extension(app_state.jwt_config.clone()))
 }

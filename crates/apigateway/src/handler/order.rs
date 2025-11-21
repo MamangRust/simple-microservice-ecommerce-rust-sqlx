@@ -9,7 +9,10 @@ use crate::{
     },
 };
 use crate::{
-    middleware::{jwt, validate::SimpleValidatedJson},
+    middleware::{
+        jwt::auth_middleware, rate_limit::rate_limit_middleware, session::session_middleware,
+        validate::SimpleValidatedJson,
+    },
     state::AppState,
 };
 use axum::{
@@ -42,7 +45,7 @@ pub async fn get_orders(
     Query(params): Query<FindAllOrder>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.find_all(&params).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -62,7 +65,7 @@ pub async fn get_active_orders(
     Query(params): Query<FindAllOrder>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.find_active(&params).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -82,7 +85,7 @@ pub async fn get_trashed_orders(
     Query(params): Query<FindAllOrder>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.find_trashed(&params).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -146,9 +149,9 @@ pub async fn update_order(
     Path(id): Path<i32>,
     SimpleValidatedJson(mut body): SimpleValidatedJson<UpdateOrderRequest>,
 ) -> Result<impl IntoResponse, HttpError> {
-    body.order_id = id;
+    body.order_id = Some(id);
     let response = service.update_order(&body).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -168,7 +171,7 @@ pub async fn trash_order_handler(
     Path(id): Path<i32>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.trash_order(id).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -188,7 +191,7 @@ pub async fn restore_order_handler(
     Path(id): Path<i32>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.restore_order(id).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -208,10 +211,13 @@ pub async fn delete_order(
     Path(id): Path<i32>,
 ) -> Result<impl IntoResponse, HttpError> {
     service.delete_order(id).await?;
-    Ok(Json(json!({
-        "status": "success",
-        "message": "Order deleted permanently"
-    })))
+    Ok((
+        StatusCode::OK,
+        Json(json!({
+            "status": "success",
+            "message": "Order deleted permanently"
+        })),
+    ))
 }
 
 #[utoipa::path(
@@ -228,10 +234,14 @@ pub async fn restore_all_order_handler(
     Extension(service): Extension<DynOrderGrpcClient>,
 ) -> Result<impl IntoResponse, HttpError> {
     service.restore_all_order().await?;
-    Ok(Json(json!({
-        "status": "success",
-        "message": "All orders restored successfully"
-    })))
+
+    Ok((
+        StatusCode::OK,
+        Json(json!({
+            "status": "success",
+           "message": "All orders restored successfully"
+        })),
+    ))
 }
 
 #[utoipa::path(
@@ -248,10 +258,14 @@ pub async fn delete_all_order_handler(
     Extension(service): Extension<DynOrderGrpcClient>,
 ) -> Result<impl IntoResponse, HttpError> {
     service.delete_all_order().await?;
-    Ok(Json(json!({
-        "status": "success",
-        "message": "All trashed orders deleted permanently"
-    })))
+
+    Ok((
+        StatusCode::OK,
+        Json(json!({
+            "status": "success",
+           "message": "All trashed orders deleted permanently"
+        })),
+    ))
 }
 
 pub fn order_routes(app_state: Arc<AppState>) -> OpenApiRouter {
@@ -267,7 +281,12 @@ pub fn order_routes(app_state: Arc<AppState>) -> OpenApiRouter {
         .route("/api/orders/restore-all", put(restore_all_order_handler))
         .route("/api/orders/delete/{id}", delete(delete_order))
         .route("/api/orders/delete-all", delete(delete_all_order_handler))
-        .route_layer(middleware::from_fn(jwt::auth))
+        .route_layer(middleware::from_fn(session_middleware))
+        .route_layer(middleware::from_fn(auth_middleware))
+        .route_layer(middleware::from_fn(rate_limit_middleware))
         .layer(Extension(app_state.di_container.order_clients.clone()))
+        .layer(Extension(app_state.di_container.role_clients.clone()))
+        .layer(Extension(app_state.rate_limit.clone()))
+        .layer(Extension(app_state.session.clone()))
         .layer(Extension(app_state.jwt_config.clone()))
 }

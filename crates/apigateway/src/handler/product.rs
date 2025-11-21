@@ -9,7 +9,10 @@ use crate::{
     },
 };
 use crate::{
-    middleware::{jwt, validate::SimpleValidatedJson},
+    middleware::{
+        jwt::auth_middleware, rate_limit::rate_limit_middleware, session::session_middleware,
+        validate::SimpleValidatedJson,
+    },
     state::AppState,
 };
 use axum::{
@@ -42,7 +45,7 @@ pub async fn get_products(
     Query(params): Query<FindAllProducts>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.find_all(&params).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -62,7 +65,7 @@ pub async fn get_active_products(
     Query(params): Query<FindAllProducts>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.find_active(&params).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -82,7 +85,7 @@ pub async fn get_trashed_products(
     Query(params): Query<FindAllProducts>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.find_trashed(&params).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -103,7 +106,7 @@ pub async fn get_product(
     Extension(_user_id): Extension<i64>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.find_by_id(id).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -146,9 +149,9 @@ pub async fn update_product(
     Path(id): Path<i32>,
     SimpleValidatedJson(mut body): SimpleValidatedJson<UpdateProductRequest>,
 ) -> Result<impl IntoResponse, HttpError> {
-    body.id = id;
+    body.id = Some(id);
     let response = service.update_product(&body).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -168,7 +171,7 @@ pub async fn trash_product_handler(
     Path(id): Path<i32>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.trash_product(id).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -188,7 +191,7 @@ pub async fn restore_product_handler(
     Path(id): Path<i32>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.restore_product(id).await?;
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 #[utoipa::path(
@@ -208,10 +211,14 @@ pub async fn delete_product(
     Path(id): Path<i32>,
 ) -> Result<impl IntoResponse, HttpError> {
     service.delete_product(id).await?;
-    Ok(Json(json!({
-        "status": "success",
-        "message": "Product deleted permanently"
-    })))
+
+    Ok((
+        StatusCode::OK,
+        Json(json!({
+            "status": "success",
+            "message": "Product deleted permanently"
+        })),
+    ))
 }
 
 #[utoipa::path(
@@ -228,10 +235,13 @@ pub async fn restore_all_product_handler(
     Extension(service): Extension<DynProductGrpcClient>,
 ) -> Result<impl IntoResponse, HttpError> {
     service.restore_all_product().await?;
-    Ok(Json(json!({
-        "status": "success",
-        "message": "All products restored successfully"
-    })))
+    Ok((
+        StatusCode::OK,
+        Json(json!({
+            "status": "success",
+            "message": "All products restored successfully"
+        })),
+    ))
 }
 
 #[utoipa::path(
@@ -248,10 +258,14 @@ pub async fn delete_all_product_handler(
     Extension(service): Extension<DynProductGrpcClient>,
 ) -> Result<impl IntoResponse, HttpError> {
     service.delete_all_product().await?;
-    Ok(Json(json!({
-        "status": "success",
-        "message": "All trashed products deleted permanently"
-    })))
+
+    Ok((
+        StatusCode::OK,
+        Json(json!({
+            "status": "success",
+            "message": "All trashed products deleted permanently"
+        })),
+    ))
 }
 
 pub fn product_routes(app_state: Arc<AppState>) -> OpenApiRouter {
@@ -273,7 +287,12 @@ pub fn product_routes(app_state: Arc<AppState>) -> OpenApiRouter {
             "/api/products/delete-all",
             delete(delete_all_product_handler),
         )
-        .route_layer(middleware::from_fn(jwt::auth))
+        .route_layer(middleware::from_fn(session_middleware))
+        .route_layer(middleware::from_fn(auth_middleware))
+        .route_layer(middleware::from_fn(rate_limit_middleware))
         .layer(Extension(app_state.di_container.product_clients.clone()))
+        .layer(Extension(app_state.di_container.role_clients.clone()))
+        .layer(Extension(app_state.rate_limit.clone()))
+        .layer(Extension(app_state.session.clone()))
         .layer(Extension(app_state.jwt_config.clone()))
 }

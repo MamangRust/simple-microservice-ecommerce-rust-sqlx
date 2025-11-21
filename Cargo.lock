@@ -85,6 +85,7 @@ dependencies = [
  "opentelemetry_sdk",
  "prometheus-client",
  "prometheus-client-derive-encode",
+ "redis",
  "serde",
  "serde_json",
  "shared",

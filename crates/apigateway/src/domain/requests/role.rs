@@ -29,7 +29,7 @@ pub struct CreateRoleRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 pub struct UpdateRoleRequest {
-    pub id: i32,
+    pub id: Option<i32>,
 
     #[validate(length(min = 1))]
     pub name: String,

@@ -503,7 +503,11 @@ impl OrderGrpcClientTrait for OrderGrpcClientService {
         &self,
         req: &DomainUpdateOrderRequest,
     ) -> Result<ApiResponse<OrderResponse>, HttpError> {
-        info!("Updating Order: {}", req.order_id);
+        info!("Updating Order: {:?}", req.order_id);
+
+        let order_id = req
+            .order_id
+            .ok_or_else(|| HttpError::BadRequest("order_id is required".into()))?;
 
         let method = Method::Put;
         let tracing_ctx = self.start_tracing(
@@ -511,7 +515,7 @@ impl OrderGrpcClientTrait for OrderGrpcClientService {
             vec![
                 KeyValue::new("component", "order"),
                 KeyValue::new("operation", "update"),
-                KeyValue::new("order_id", req.order_id.to_string()),
+                KeyValue::new("order_id", order_id.to_string()),
                 KeyValue::new("product_id", req.user_id.to_string()),
             ],
         );
@@ -521,7 +525,7 @@ impl OrderGrpcClientTrait for OrderGrpcClientService {
         }
 
         let request = Request::new(UpdateOrderRequest {
-            order_id: req.order_id,
+            order_id: order_id,
             user_id: req.user_id,
             items: req
                 .items

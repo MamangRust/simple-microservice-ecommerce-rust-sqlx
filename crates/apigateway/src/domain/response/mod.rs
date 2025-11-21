@@ -4,5 +4,6 @@ pub mod order_item;
 pub mod pagination;
 pub mod product;
 pub mod role;
+pub mod session;
 pub mod token;
 pub mod user;

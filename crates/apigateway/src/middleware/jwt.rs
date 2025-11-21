@@ -8,7 +8,7 @@ use axum::{
 use axum_extra::extract::cookie::CookieJar;
 use shared::{abstract_trait::DynJwtService, errors::ErrorResponse};
 
-pub async fn auth(
+pub async fn auth_middleware(
     cookie_jar: CookieJar,
     Extension(jwt): Extension<DynJwtService>,
     mut req: Request<Body>,

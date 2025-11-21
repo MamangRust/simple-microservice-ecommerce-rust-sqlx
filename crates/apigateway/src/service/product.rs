@@ -492,7 +492,11 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
         &self,
         req: &DomainUpdateProductRequest,
     ) -> Result<ApiResponse<ProductResponse>, HttpError> {
-        info!("Updating Product: {}", req.id);
+        info!("Updating Product: {:?}", req.id);
+
+        let product_id = req
+            .id
+            .ok_or_else(|| HttpError::BadRequest("product id is required".into()))?;
 
         let method = Method::Put;
         let tracing_ctx = self.start_tracing(
@@ -500,7 +504,7 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
             vec![
                 KeyValue::new("component", "product"),
                 KeyValue::new("operation", "update"),
-                KeyValue::new("product.id", req.id.to_string()),
+                KeyValue::new("product.id", product_id.to_string()),
                 KeyValue::new("product.name", req.name.clone()),
                 KeyValue::new("product.price", req.price.to_string()),
                 KeyValue::new("product.stock", req.stock.to_string()),
@@ -508,7 +512,7 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
         );
 
         let mut request = Request::new(UpdateProductRequest {
-            id: req.id,
+            id: product_id,
             name: req.name.clone(),
             price: req.price,
             stock: req.stock,
