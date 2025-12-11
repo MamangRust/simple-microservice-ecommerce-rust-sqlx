@@ -64,3 +64,7 @@ The architecture consists of several microservices that communicate with each ot
 - `make build-<service-name>`: Build a specific service (e.g., `make build-apigateway`).
 - `make clipy`: Run clippy for all crates.
 - `make fmt`: Check formatting for all crates.
+
+## Preview Grafana
+
+![Usage Memory](./images/memory.png)

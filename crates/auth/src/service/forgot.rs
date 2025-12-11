@@ -31,8 +31,9 @@ use shared::{
         TracingContext, generate_random_string,
     },
 };
+use anyhow::Result;
 use std::sync::Arc;
-use tokio::{sync::Mutex, time::Instant};
+use tokio::time::Instant;
 use tonic::{Request, Status};
 use tracing::{error, info, warn};
 
@@ -41,8 +42,6 @@ pub struct PasswordResetServiceDeps {
     pub reset_token_command: DynResetTokenCommandRepository,
     pub user_client: DynUserGrpcClient,
     pub kafka: DynKafka,
-    pub metrics: Arc<Mutex<Metrics>>,
-    pub registry: Arc<Mutex<Registry>>,
     pub cache_store: Arc<CacheStore>,
 }
 
@@ -52,42 +51,42 @@ pub struct PasswordResetService {
     reset_token_command: DynResetTokenCommandRepository,
     user_client: DynUserGrpcClient,
     kafka: DynKafka,
-    metrics: Arc<Mutex<Metrics>>,
+    metrics: Metrics,
     cache_store: Arc<CacheStore>,
 }
 
 impl PasswordResetService {
-    pub async fn new(deps: PasswordResetServiceDeps) -> Self {
+    pub fn new(deps: PasswordResetServiceDeps, registry: &mut Registry) -> Result<Self> {
+        let metrics = Metrics::new();
+
         let PasswordResetServiceDeps {
             reset_token_query,
             reset_token_command,
             user_client,
             kafka,
-            metrics,
-            registry,
             cache_store,
         } = deps;
 
-        registry.lock().await.register(
+        registry.register(
             "password_reset_service_request_counter",
             "Total number of requests to the PasswordResetService",
-            metrics.lock().await.request_counter.clone(),
+            metrics.request_counter.clone(),
         );
 
-        registry.lock().await.register(
+        registry.register(
             "password_reset_service_request_duration",
             "Histogram of request durations for the PasswordResetService",
-            metrics.lock().await.request_duration.clone(),
+            metrics.request_duration.clone(),
         );
 
-        Self {
+        Ok(Self {
             reset_token_query,
             reset_token_command,
             user_client,
             kafka,
             metrics,
             cache_store,
-        }
+        })
     }
 
     fn get_tracer(&self) -> BoxedTracer {
@@ -173,7 +172,7 @@ impl PasswordResetService {
             error!("❌ Operation failed: {message}");
         }
 
-        self.metrics.lock().await.record(method, status, elapsed);
+        self.metrics.record(method, status, elapsed);
 
         tracing_ctx.cx.span().end();
     }

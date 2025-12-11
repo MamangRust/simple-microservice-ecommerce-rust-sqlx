@@ -23,45 +23,46 @@ use opentelemetry::{
     global::{self, BoxedTracer},
     trace::{Span, SpanKind, TraceContextExt, Tracer},
 };
+use anyhow::Result;
 use prometheus_client::registry::Registry;
 use shared::{
     errors::{AppErrorGrpc, HttpError},
     utils::{MetadataInjector, Method, Metrics, Status as StatusUtils, TracingContext},
 };
-use std::sync::Arc;
-use tokio::{sync::Mutex, time::Instant};
+use tokio::time::Instant;
 use tonic::{Request, transport::Channel};
 use tracing::{error, info};
 
 #[derive(Debug, Clone)]
 pub struct ProductGrpcClientService {
-    query_client: Arc<Mutex<ProductQueryServiceClient<Channel>>>,
-    command_client: Arc<Mutex<ProductCommandServiceClient<Channel>>>,
-    metrics: Arc<Mutex<Metrics>>,
+    query_client: ProductQueryServiceClient<Channel>,
+    command_client: ProductCommandServiceClient<Channel>,
+    metrics: Metrics,
 }
 
 impl ProductGrpcClientService {
-    pub async fn new(
-        query_client: Arc<Mutex<ProductQueryServiceClient<Channel>>>,
-        command_client: Arc<Mutex<ProductCommandServiceClient<Channel>>>,
-        metrics: Arc<Mutex<Metrics>>,
-        registry: Arc<Mutex<Registry>>,
-    ) -> Self {
-        registry.lock().await.register(
+    pub fn new(
+        query_client: ProductQueryServiceClient<Channel>,
+        command_client: ProductCommandServiceClient<Channel>,
+        registry: &mut Registry,
+    ) -> Result<Self> {
+        let metrics = Metrics::new();
+
+        registry.register(
             "product_service_client_request_counter",
             "Total number of requests to the ProductGrpcClientService",
-            metrics.lock().await.request_counter.clone(),
+            metrics.request_counter.clone(),
         );
-        registry.lock().await.register(
+        registry.register(
             "product_service_client_request_duration",
             "Histogram of request durations for the ProductGrpcClientService",
-            metrics.lock().await.request_duration.clone(),
+            metrics.request_duration.clone(),
         );
-        Self {
+        Ok(Self {
             query_client,
             command_client,
             metrics,
-        }
+        })
     }
 
     fn get_tracer(&self) -> BoxedTracer {
@@ -147,7 +148,7 @@ impl ProductGrpcClientService {
             error!("Operation failed: {message}");
         }
 
-        self.metrics.lock().await.record(method, status, elapsed);
+        self.metrics.record(method, status, elapsed);
 
         tracing_ctx.cx.span().end();
     }
@@ -184,7 +185,7 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.query_client.lock().await.find_all(request).await {
+        let response = match self.query_client.clone().find_all(request).await {
             Ok(response) => {
                 self.complete_tracing_success(
                     &tracing_ctx,
@@ -252,7 +253,7 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.query_client.lock().await.find_by_active(request).await {
+        let response = match self.query_client.clone().find_by_active(request).await {
             Ok(response) => {
                 self.complete_tracing_success(
                     &tracing_ctx,
@@ -321,13 +322,7 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self
-            .query_client
-            .lock()
-            .await
-            .find_by_trashed(request)
-            .await
-        {
+        let response = match self.query_client.clone().find_by_trashed(request).await {
             Ok(response) => {
                 self.complete_tracing_success(&tracing_ctx, method, "success fetch trashed")
                     .await;
@@ -380,7 +375,7 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.query_client.lock().await.find_by_id(request).await {
+        let response = match self.query_client.clone().find_by_id(request).await {
             Ok(response) => {
                 self.complete_tracing_success(
                     &tracing_ctx,
@@ -450,7 +445,7 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.command_client.lock().await.create(request).await {
+        let response = match self.command_client.clone().create(request).await {
             Ok(response) => {
                 self.complete_tracing_success(&tracing_ctx, method, "Successfully created Product")
                     .await;
@@ -520,7 +515,7 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.command_client.lock().await.update(request).await {
+        let response = match self.command_client.clone().update(request).await {
             Ok(response) => {
                 self.complete_tracing_success(&tracing_ctx, method, "Successfully updated Product")
                     .await;
@@ -580,7 +575,7 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.command_client.lock().await.trashed(request).await {
+        let response = match self.command_client.clone().trashed(request).await {
             Ok(resp) => {
                 self.complete_tracing_success(&tracing_ctx, method, "Product soft deleted")
                     .await;
@@ -638,7 +633,7 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.command_client.lock().await.restore(request).await {
+        let response = match self.command_client.clone().restore(request).await {
             Ok(resp) => {
                 self.complete_tracing_success(&tracing_ctx, method, "Product restored")
                     .await;
@@ -695,8 +690,7 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
 
         let response = match self
             .command_client
-            .lock()
-            .await
+            .clone()
             .delete_product_permanent(request)
             .await
         {
@@ -747,8 +741,7 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
 
         let response = match self
             .command_client
-            .lock()
-            .await
+            .clone()
             .restore_all_product(request)
             .await
         {
@@ -799,8 +792,7 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
 
         let response = match self
             .command_client
-            .lock()
-            .await
+            .clone()
             .delete_all_product(request)
             .await
         {

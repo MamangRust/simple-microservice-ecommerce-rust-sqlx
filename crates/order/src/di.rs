@@ -10,16 +10,14 @@ use crate::{
         order_item::OrderItemQueryService,
     },
 };
-use anyhow::Result;
+use anyhow::{Result, Context};
 use prometheus_client::registry::Registry;
 use shared::{
     abstract_trait::DynKafka,
     cache::CacheStore,
     config::{ConnectionPool, RedisClient},
-    utils::Metrics,
 };
 use std::{fmt, sync::Arc};
-use tokio::sync::Mutex;
 
 #[derive(Clone)]
 pub struct DependenciesInject {
@@ -42,18 +40,14 @@ impl fmt::Debug for DependenciesInject {
 pub struct DependenciesInjectDeps {
     pub pool: ConnectionPool,
     pub kafka: DynKafka,
-    pub metrics: Arc<Mutex<Metrics>>,
-    pub registry: Arc<Mutex<Registry>>,
     pub redis: RedisClient,
 }
 
 impl DependenciesInject {
-    pub async fn new(deps: DependenciesInjectDeps, clients: GrpcClients) -> Result<Self> {
+    pub async fn new(deps: DependenciesInjectDeps, clients: GrpcClients, registry: &mut Registry) -> Result<Self> {
         let DependenciesInjectDeps {
             kafka,
             pool,
-            metrics,
-            registry,
             redis,
         } = deps;
 
@@ -69,11 +63,9 @@ impl DependenciesInject {
 
         let order_query = OrderQueryService::new(
             order_query_repo.clone(),
-            metrics.clone(),
-            registry.clone(),
+            registry,
             cache.clone(),
-        )
-        .await;
+        ).context("failed initialize order query")?;
 
         let order_command_deps = OrderCommandServiceDeps {
             product_client,
@@ -82,19 +74,15 @@ impl DependenciesInject {
             query: order_query_repo.clone(),
             command: order_command_repo,
             kafka,
-            metrics: metrics.clone(),
-            registry: registry.clone(),
         };
 
-        let order_command = OrderCommandService::new(order_command_deps).await;
+        let order_command = OrderCommandService::new(order_command_deps, registry).context("failed initialize order command")?;
 
         let order_item_query = OrderItemQueryService::new(
             order_item_query_repo.clone(),
-            metrics.clone(),
-            registry.clone(),
+            registry,
             cache.clone(),
-        )
-        .await;
+        ).context("failed initialize order item query")?;
 
         Ok(Self {
             order_query,

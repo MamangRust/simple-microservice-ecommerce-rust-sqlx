@@ -9,6 +9,9 @@ pub enum ServiceError {
     #[error("Repository error: {0}")]
     Repo(#[from] RepositoryError),
 
+    #[error("Forbidden: {0}")]
+    Forbidden(String),
+
     #[error("Invalid credentials")]
     InvalidCredentials,
 

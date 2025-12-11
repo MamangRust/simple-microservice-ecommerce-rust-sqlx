@@ -1,6 +1,7 @@
 use crate::errors::{
     error::ErrorResponse, grpc::AppErrorGrpc, repository::RepositoryError, service::ServiceError,
 };
+use tracing::{info, error, warn};
 use axum::{
     Json,
     http::StatusCode,
@@ -15,6 +16,7 @@ pub enum HttpError {
     Conflict(String),
     ServiceUnavailable(String),
     Internal(String),
+    Forbidden(String),
 }
 
 impl From<AppErrorGrpc> for HttpError {
@@ -27,6 +29,10 @@ impl From<AppErrorGrpc> for HttpError {
 
                 ServiceError::Validation(errors) => {
                     HttpError::BadRequest(format!("Validation failed: {errors:?}"))
+                }
+
+                ServiceError::Forbidden(msg) => {
+                    HttpError::Forbidden(msg)
                 }
 
                 ServiceError::Repo(repo_err) => match repo_err {
@@ -65,14 +71,22 @@ impl From<AppErrorGrpc> for HttpError {
 
 impl IntoResponse for HttpError {
     fn into_response(self) -> Response {
-        let (status, msg) = match self {
-            HttpError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
-            HttpError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg),
-            HttpError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
-            HttpError::Conflict(msg) => (StatusCode::CONFLICT, msg),
-            HttpError::ServiceUnavailable(msg) => (StatusCode::SERVICE_UNAVAILABLE, msg),
-            HttpError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
+        let (status, msg, log_level) = match self {
+            HttpError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg, "warn"),
+            HttpError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg, "warn"),
+            HttpError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg, "warn"),
+            HttpError::NotFound(msg) => (StatusCode::NOT_FOUND, msg, "info"),
+            HttpError::Conflict(msg) => (StatusCode::CONFLICT, msg, "warn"),
+            HttpError::ServiceUnavailable(msg) => (StatusCode::SERVICE_UNAVAILABLE, msg, "error"),
+            HttpError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg, "error"),
         };
+
+        match log_level {
+            "error" => error!("HTTP {}: {}", status, msg),
+            "warn" => warn!("HTTP {}: {}", status, msg),
+            "info" => info!("HTTP {}: {}", status, msg),
+            _ => error!("HTTP {}: {}", status, msg),
+        }
 
         let body = Json(ErrorResponse {
             status: "error".into(),

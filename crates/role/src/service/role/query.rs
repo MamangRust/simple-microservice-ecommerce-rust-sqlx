@@ -22,41 +22,43 @@ use shared::{
     errors::ServiceError,
     utils::{MetadataInjector, Method, Metrics, Status as StatusUtils, TracingContext},
 };
+use anyhow::Result;
 use std::sync::Arc;
-use tokio::{sync::Mutex, time::Instant};
+use tokio::time::Instant;
 use tonic::Request;
 use tracing::{error, info};
 
 #[derive(Clone)]
 pub struct RoleQueryService {
     pub query: DynRoleQueryRepository,
-    pub metrics: Arc<Mutex<Metrics>>,
+    pub metrics: Metrics,
     pub cache_store: Arc<CacheStore>,
 }
 
 impl RoleQueryService {
-    pub async fn new(
+    pub fn new(
         query: DynRoleQueryRepository,
-        metrics: Arc<Mutex<Metrics>>,
-        registry: Arc<Mutex<Registry>>,
+        registry: &mut Registry,
         cache_store: Arc<CacheStore>,
-    ) -> Self {
-        registry.lock().await.register(
+    ) -> Result<Self> {
+        let metrics = Metrics::new();
+
+        registry.register(
             "role_query_service_request_counter",
             "Total number of requests to the RoleQueryService",
-            metrics.lock().await.request_counter.clone(),
+            metrics.request_counter.clone(),
         );
-        registry.lock().await.register(
+        registry.register(
             "role_query_service_request_duration",
             "Histogram of request durations for the RoleQueryService",
-            metrics.lock().await.request_duration.clone(),
+            metrics.request_duration.clone(),
         );
 
-        Self {
+        Ok(Self {
             query,
             metrics,
             cache_store,
-        }
+        })
     }
 
     fn get_tracer(&self) -> BoxedTracer {
@@ -142,7 +144,7 @@ impl RoleQueryService {
             error!("❌ Operation failed: {message}");
         }
 
-        self.metrics.lock().await.record(method, status, elapsed);
+        self.metrics.record(method, status, elapsed);
 
         tracing_ctx.cx.span().end();
     }

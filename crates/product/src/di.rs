@@ -2,15 +2,13 @@ use crate::{
     repository::{command::ProductCommandRepository, query::ProductQueryRepository},
     service::{command::ProductCommandService, query::ProductQueryService},
 };
-use anyhow::Result;
+use anyhow::{Result, Context};
 use prometheus_client::registry::Registry;
 use shared::{
     cache::CacheStore,
     config::{ConnectionPool, RedisClient},
-    utils::Metrics,
 };
 use std::{fmt, sync::Arc};
-use tokio::sync::Mutex;
 
 #[derive(Clone)]
 pub struct DependenciesInject {
@@ -30,17 +28,13 @@ impl fmt::Debug for DependenciesInject {
 #[derive(Clone)]
 pub struct DependenciesInjectDeps {
     pub pool: ConnectionPool,
-    pub metrics: Arc<Mutex<Metrics>>,
-    pub registry: Arc<Mutex<Registry>>,
     pub redis: RedisClient,
 }
 
 impl DependenciesInject {
-    pub async fn new(deps: DependenciesInjectDeps) -> Result<Self> {
+    pub fn new(deps: DependenciesInjectDeps, registry: &mut Registry) -> Result<Self> {
         let DependenciesInjectDeps {
             pool,
-            metrics,
-            registry,
             redis,
         } = deps;
 
@@ -51,18 +45,14 @@ impl DependenciesInject {
 
         let product_query = ProductQueryService::new(
             product_query_repo.clone(),
-            metrics.clone(),
-            registry.clone(),
+            registry,
             cache.clone(),
-        )
-        .await;
+        ).context("failed initialize product query")?;
 
         let product_command = ProductCommandService::new(
             product_command_repo.clone(),
-            metrics.clone(),
-            registry.clone(),
-        )
-        .await;
+            registry,
+        ).context("failed initialize product command")?;
 
         Ok(Self {
             product_query,

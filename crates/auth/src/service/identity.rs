@@ -23,8 +23,9 @@ use shared::{
     errors::{ServiceError, grpc_status_to_service_error},
     utils::{MetadataInjector, Method, Metrics, Status as StatusUtils, TracingContext},
 };
+use anyhow::Result;
 use std::sync::Arc;
-use tokio::{sync::Mutex, time::Instant};
+use tokio::time::Instant;
 use tonic::Request;
 use tracing::{error, info};
 
@@ -34,7 +35,7 @@ pub struct IdentityService {
     jwt: DynJwtService,
     token_service: DynTokenService,
     user_client: DynUserGrpcClient,
-    metrics: Arc<Mutex<Metrics>>,
+    metrics: Metrics,
     cache_store: Arc<CacheStore>,
 }
 
@@ -43,42 +44,40 @@ pub struct IdentityServiceDeps {
     pub jwt: DynJwtService,
     pub token_service: DynTokenService,
     pub user_client: DynUserGrpcClient,
-    pub metrics: Arc<Mutex<Metrics>>,
-    pub registry: Arc<Mutex<Registry>>,
     pub cache_store: Arc<CacheStore>,
 }
 
 impl IdentityService {
-    pub async fn new(deps: IdentityServiceDeps) -> Self {
+    pub fn new(deps: IdentityServiceDeps, registry: &mut Registry) -> Result<Self> {
+        let metrics = Metrics::new();
+
         let IdentityServiceDeps {
             refresh_token_command,
             jwt,
             token_service,
             user_client,
-            metrics,
-            registry,
             cache_store,
         } = deps;
 
-        registry.lock().await.register(
+        registry.register(
             "identity_service_request_counter",
             "Total number of requests to the IdentityService",
-            metrics.lock().await.request_counter.clone(),
+            metrics.request_counter.clone(),
         );
-        registry.lock().await.register(
+        registry.register(
             "identity_service_request_duration",
             "Histogram of request durations for the IdentityService",
-            metrics.lock().await.request_duration.clone(),
+            metrics.request_duration.clone(),
         );
 
-        Self {
+        Ok(Self {
             refresh_token_command,
             jwt,
             token_service,
             user_client,
             metrics,
             cache_store,
-        }
+        })
     }
 
     fn get_tracer(&self) -> BoxedTracer {
@@ -164,7 +163,7 @@ impl IdentityService {
             error!("❌ Operation failed: {message}");
         }
 
-        self.metrics.lock().await.record(method, status, elapsed);
+        self.metrics.record(method, status, elapsed);
 
         tracing_ctx.cx.span().end();
     }

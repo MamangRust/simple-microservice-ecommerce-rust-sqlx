@@ -8,6 +8,7 @@ use crate::{
         response::{api::ApiResponse, token::TokenResponse, user::UserResponse},
     },
 };
+use anyhow::Result;
 use async_trait::async_trait;
 use genproto::{
     auth::{
@@ -26,35 +27,32 @@ use shared::{
     errors::{AppErrorGrpc, HttpError},
     utils::{MetadataInjector, Method, Metrics, Status as StatusUtils, TracingContext},
 };
-use std::sync::Arc;
-use tokio::{sync::Mutex, time::Instant};
+use tokio::time::Instant;
 use tonic::{Request, transport::Channel};
 use tracing::{error, info};
 
 #[derive(Debug)]
 pub struct AuthGrpcClientService {
-    client: Arc<Mutex<AuthServiceClient<Channel>>>,
-    metrics: Arc<Mutex<Metrics>>,
+    client: AuthServiceClient<Channel>,
+    metrics: Metrics,
 }
 
 impl AuthGrpcClientService {
-    pub async fn new(
-        client: Arc<Mutex<AuthServiceClient<Channel>>>,
-        metrics: Arc<Mutex<Metrics>>,
-        registry: Arc<Mutex<Registry>>,
-    ) -> Self {
-        registry.lock().await.register(
+    pub fn new(client: AuthServiceClient<Channel>, registry: &mut Registry) -> Result<Self> {
+        let metrics = Metrics::new();
+
+        registry.register(
             "auth_service_client_request_counter",
             "Total number of requests to the AuthGrpcClientService",
-            metrics.lock().await.request_counter.clone(),
+            metrics.request_counter.clone(),
         );
-        registry.lock().await.register(
+        registry.register(
             "auth_service_client_request_duration",
             "Histogram of request durations for the AuthGrpcClientService",
-            metrics.lock().await.request_duration.clone(),
+            metrics.request_duration.clone(),
         );
 
-        Self { client, metrics }
+        Ok(Self { client, metrics })
     }
 
     fn get_tracer(&self) -> BoxedTracer {
@@ -140,7 +138,7 @@ impl AuthGrpcClientService {
             error!("Operation failed: {message}");
         }
 
-        self.metrics.lock().await.record(method, status, elapsed);
+        self.metrics.record(method, status, elapsed);
 
         tracing_ctx.cx.span().end();
     }
@@ -177,7 +175,7 @@ impl AuthGrpcClientTrait for AuthGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.client.lock().await.register_user(request).await {
+        let response = match self.client.clone().register_user(request).await {
             Ok(response) => {
                 info!("gRPC register succeeded");
                 self.complete_tracing_success(
@@ -262,7 +260,7 @@ impl AuthGrpcClientTrait for AuthGrpcClientService {
             ],
         );
 
-        let mut client = self.client.lock().await;
+        let mut client = self.client.clone();
 
         let mut request = Request::new(LoginRequest {
             email: input.email.clone(),
@@ -343,7 +341,7 @@ impl AuthGrpcClientTrait for AuthGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.client.lock().await.get_me(request).await {
+        let response = match self.client.clone().get_me(request).await {
             Ok(response) => {
                 info!("gRPC get_me succeeded");
                 self.complete_tracing_success(
@@ -422,7 +420,7 @@ impl AuthGrpcClientTrait for AuthGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.client.lock().await.forgot_password(request).await {
+        let response = match self.client.clone().forgot_password(request).await {
             Ok(response) => {
                 info!("gRPC forgot_password succeeded");
                 self.complete_tracing_success(
@@ -487,7 +485,7 @@ impl AuthGrpcClientTrait for AuthGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut grpc_request);
 
-        let response = match self.client.lock().await.reset_password(grpc_request).await {
+        let response = match self.client.clone().reset_password(grpc_request).await {
             Ok(response) => {
                 info!("gRPC reset_password succeeded");
                 self.complete_tracing_success(
@@ -550,7 +548,7 @@ impl AuthGrpcClientTrait for AuthGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.client.lock().await.verify_code(request).await {
+        let response = match self.client.clone().verify_code(request).await {
             Ok(response) => {
                 info!("gRPC verify_code succeeded");
                 self.complete_tracing_success(
@@ -610,7 +608,7 @@ impl AuthGrpcClientTrait for AuthGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.client.lock().await.refresh_token(request).await {
+        let response = match self.client.clone().refresh_token(request).await {
             Ok(response) => {
                 info!("gRPC refresh_token succeeded");
                 self.complete_tracing_success(

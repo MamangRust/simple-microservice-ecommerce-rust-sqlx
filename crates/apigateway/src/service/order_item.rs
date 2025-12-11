@@ -23,35 +23,36 @@ use shared::{
     errors::{AppErrorGrpc, HttpError},
     utils::{MetadataInjector, Method, Metrics, Status as StatusUtils, TracingContext},
 };
-use std::sync::Arc;
-use tokio::{sync::Mutex, time::Instant};
+use tokio::time::Instant;
 use tonic::{Request, transport::Channel};
 use tracing::{error, info};
+use anyhow::Result;
 
 #[derive(Debug, Clone)]
 pub struct OrderItemGrpcClientService {
-    client: Arc<Mutex<OrderItemServiceClient<Channel>>>,
-    metrics: Arc<Mutex<Metrics>>,
+    client: OrderItemServiceClient<Channel>,
+    metrics: Metrics,
 }
 
 impl OrderItemGrpcClientService {
     pub async fn new(
-        client: Arc<Mutex<OrderItemServiceClient<Channel>>>,
-        metrics: Arc<Mutex<Metrics>>,
-        registry: Arc<Mutex<Registry>>,
-    ) -> Self {
-        registry.lock().await.register(
+        client: OrderItemServiceClient<Channel>,
+        registry: &mut Registry,
+    ) -> Result<Self> {
+        let metrics = Metrics::new();
+
+        registry.register(
             "order_item_service_client_request_counter",
             "Total number of requests to the OrderItemGrpcClientService",
-            metrics.lock().await.request_counter.clone(),
+            metrics.request_counter.clone(),
         );
-        registry.lock().await.register(
+        registry.register(
             "order_item_service_client_duration",
             "Histogram of request durations for the OrderItemGrpcClientService",
-            metrics.lock().await.request_duration.clone(),
+            metrics.request_duration.clone(),
         );
 
-        Self { client, metrics }
+        Ok(Self { client, metrics })
     }
     fn get_tracer(&self) -> BoxedTracer {
         global::tracer("order_item-client-service")
@@ -136,7 +137,7 @@ impl OrderItemGrpcClientService {
             error!("Operation failed: {message}");
         }
 
-        self.metrics.lock().await.record(method, status, elapsed);
+        self.metrics.record(method, status, elapsed);
 
         tracing_ctx.cx.span().end();
     }
@@ -172,7 +173,7 @@ impl OrderItemGrpcClientTrait for OrderItemGrpcClientService {
         });
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.client.lock().await.find_all(request).await {
+        let response = match self.client.clone().find_all(request).await {
             Ok(resp) => {
                 self.complete_tracing_success(
                     &tracing_ctx,
@@ -235,7 +236,7 @@ impl OrderItemGrpcClientTrait for OrderItemGrpcClientService {
         });
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.client.lock().await.find_by_active(request).await {
+        let response = match self.client.clone().find_by_active(request).await {
             Ok(resp) => {
                 self.complete_tracing_success(
                     &tracing_ctx,
@@ -300,7 +301,7 @@ impl OrderItemGrpcClientTrait for OrderItemGrpcClientService {
         });
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.client.lock().await.find_by_active(request).await {
+        let response = match self.client.clone().find_by_active(request).await {
             Ok(resp) => {
                 self.complete_tracing_success(
                     &tracing_ctx,
@@ -360,8 +361,7 @@ impl OrderItemGrpcClientTrait for OrderItemGrpcClientService {
 
         let response = match self
             .client
-            .lock()
-            .await
+            .clone()
             .find_order_item_by_order(request)
             .await
         {

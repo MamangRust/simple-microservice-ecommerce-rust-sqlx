@@ -10,6 +10,7 @@ use crate::{
         },
     },
 };
+use anyhow::Result;
 use async_trait::async_trait;
 use genproto::product::FindByIdProductRequest;
 use opentelemetry::{
@@ -22,35 +23,32 @@ use shared::{
     errors::ServiceError,
     utils::{MetadataInjector, Method, Metrics, Status as StatusUtils, TracingContext},
 };
-use std::sync::Arc;
-use tokio::{sync::Mutex, time::Instant};
+use tokio::time::Instant;
 use tonic::Request;
 use tracing::{error, info};
 
 #[derive(Clone)]
 pub struct ProductCommandService {
     pub command: DynProductCommandRepository,
-    pub metrics: Arc<Mutex<Metrics>>,
+    pub metrics: Metrics,
 }
 
 impl ProductCommandService {
-    pub async fn new(
-        command: DynProductCommandRepository,
-        metrics: Arc<Mutex<Metrics>>,
-        registry: Arc<Mutex<Registry>>,
-    ) -> Self {
-        registry.lock().await.register(
+    pub fn new(command: DynProductCommandRepository, registry: &mut Registry) -> Result<Self> {
+        let metrics = Metrics::new();
+
+        registry.register(
             "product_command_service_request_counter",
             "Total number of requests to the ProductCommandService",
-            metrics.lock().await.request_counter.clone(),
+            metrics.request_counter.clone(),
         );
-        registry.lock().await.register(
+        registry.register(
             "product_command_service_request_duration",
             "Histogram of request durations for the ProductCommandService",
-            metrics.lock().await.request_duration.clone(),
+            metrics.request_duration.clone(),
         );
 
-        Self { command, metrics }
+        Ok(Self { command, metrics })
     }
     fn get_tracer(&self) -> BoxedTracer {
         global::tracer("product-command-service")
@@ -135,7 +133,7 @@ impl ProductCommandService {
             error!("❌ Operation failed: {message}");
         }
 
-        self.metrics.lock().await.record(method, status, elapsed);
+        self.metrics.record(method, status, elapsed);
 
         tracing_ctx.cx.span().end();
     }

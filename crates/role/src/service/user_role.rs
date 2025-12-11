@@ -18,35 +18,36 @@ use shared::{
     errors::ServiceError,
     utils::{MetadataInjector, Method, Metrics, Status as StatusUtils, TracingContext},
 };
-use std::sync::Arc;
-use tokio::{sync::Mutex, time::Instant};
+use anyhow::Result;
+use tokio::{ time::Instant};
 use tonic::Request;
 use tracing::{error, info};
 
 #[derive(Clone)]
 pub struct UserRoleCommandService {
     pub command: DynUserRoleCommandRepository,
-    pub metrics: Arc<Mutex<Metrics>>,
+    pub metrics: Metrics,
 }
 
 impl UserRoleCommandService {
-    pub async fn new(
+    pub fn new(
         command: DynUserRoleCommandRepository,
-        metrics: Arc<Mutex<Metrics>>,
-        registry: Arc<Mutex<Registry>>,
-    ) -> Self {
-        registry.lock().await.register(
+        registry: &mut Registry,
+    ) -> Result<Self> {
+        let metrics = Metrics::new();
+
+        registry.register(
             "user_role_service_request_counter",
             "Total number of requests to the UserRoleCommandService",
-            metrics.lock().await.request_counter.clone(),
+            metrics.request_counter.clone(),
         );
-        registry.lock().await.register(
+        registry.register(
             "user_role_service_request_duration",
             "Histogram of request durations for the UserRoleCommandService",
-            metrics.lock().await.request_duration.clone(),
+            metrics.request_duration.clone(),
         );
 
-        Self { command, metrics }
+        Ok(Self { command, metrics })
     }
 
     fn get_tracer(&self) -> BoxedTracer {
@@ -132,7 +133,7 @@ impl UserRoleCommandService {
             error!("❌ Operation failed: {message}");
         }
 
-        self.metrics.lock().await.record(method, status, elapsed);
+        self.metrics.record(method, status, elapsed);
 
         tracing_ctx.cx.span().end();
     }

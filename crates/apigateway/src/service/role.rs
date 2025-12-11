@@ -17,6 +17,7 @@ use genproto::role::{
     UpdateRoleRequest, role_command_service_client::RoleCommandServiceClient,
     role_query_service_client::RoleQueryServiceClient,
 };
+use anyhow::Result;
 use opentelemetry::{
     Context, KeyValue,
     global::{self, BoxedTracer},
@@ -27,41 +28,41 @@ use shared::{
     errors::{AppErrorGrpc, HttpError},
     utils::{MetadataInjector, Method, Metrics, Status as StatusUtils, TracingContext},
 };
-use std::sync::Arc;
-use tokio::{sync::Mutex, time::Instant};
+use tokio::time::Instant;
 use tonic::{Request, transport::Channel};
 use tracing::{error, info};
 
 #[derive(Debug, Clone)]
 pub struct RoleGrpcClientService {
-    query_client: Arc<Mutex<RoleQueryServiceClient<Channel>>>,
-    command_client: Arc<Mutex<RoleCommandServiceClient<Channel>>>,
-    metrics: Arc<Mutex<Metrics>>,
+    query_client: RoleQueryServiceClient<Channel>,
+    command_client: RoleCommandServiceClient<Channel>,
+    metrics: Metrics,
 }
 
 impl RoleGrpcClientService {
-    pub async fn new(
-        query_client: Arc<Mutex<RoleQueryServiceClient<Channel>>>,
-        command_client: Arc<Mutex<RoleCommandServiceClient<Channel>>>,
-        metrics: Arc<Mutex<Metrics>>,
-        registry: Arc<Mutex<Registry>>,
-    ) -> Self {
-        registry.lock().await.register(
+    pub fn new(
+        query_client: RoleQueryServiceClient<Channel>,
+        command_client: RoleCommandServiceClient<Channel>,
+        registry: &mut Registry,
+    ) -> Result<Self> {
+        let metrics = Metrics::new();
+
+        registry.register(
             "role_service_client_request_counter",
             "Total number of requests to the RoleGrpcClientService",
-            metrics.lock().await.request_counter.clone(),
+            metrics.request_counter.clone(),
         );
-        registry.lock().await.register(
+        registry.register(
             "role_service_client_duration",
             "Histogram of request durations for the RoleGrpcClientService",
-            metrics.lock().await.request_duration.clone(),
+            metrics.request_duration.clone(),
         );
 
-        Self {
+        Ok(Self {
             query_client,
             command_client,
             metrics,
-        }
+        })
     }
     fn get_tracer(&self) -> BoxedTracer {
         global::tracer("role-client-service")
@@ -146,7 +147,7 @@ impl RoleGrpcClientService {
             error!("Operation failed: {message}");
         }
 
-        self.metrics.lock().await.record(method, status, elapsed);
+        self.metrics.record(method, status, elapsed);
 
         tracing_ctx.cx.span().end();
     }
@@ -183,7 +184,7 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.query_client.lock().await.find_all_role(request).await {
+        let response = match self.query_client.clone().find_all_role(request).await {
             Ok(response) => {
                 self.complete_tracing_success(&tracing_ctx, method, "Successfully fetched roles")
                     .await;
@@ -242,7 +243,7 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.query_client.lock().await.find_by_active(request).await {
+        let response = match self.query_client.clone().find_by_active(request).await {
             Ok(response) => {
                 self.complete_tracing_success(&tracing_ctx, method, "Successfully fetched roles")
                     .await;
@@ -301,13 +302,7 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self
-            .query_client
-            .lock()
-            .await
-            .find_by_trashed(request)
-            .await
-        {
+        let response = match self.query_client.clone().find_by_trashed(request).await {
             Ok(response) => {
                 self.complete_tracing_success(&tracing_ctx, method, "Successfully fetched roles")
                     .await;
@@ -354,13 +349,7 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self
-            .query_client
-            .lock()
-            .await
-            .find_by_id_role(request)
-            .await
-        {
+        let response = match self.query_client.clone().find_by_id_role(request).await {
             Ok(response) => {
                 self.complete_tracing_success(&tracing_ctx, method, "Successfully fetched Role")
                     .await;
@@ -415,13 +404,7 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self
-            .query_client
-            .lock()
-            .await
-            .find_by_user_id(request)
-            .await
-        {
+        let response = match self.query_client.clone().find_by_user_id(request).await {
             Ok(response) => {
                 self.complete_tracing_success(&tracing_ctx, method, "Successfully fetched roles")
                     .await;
@@ -474,7 +457,7 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.command_client.lock().await.create_role(request).await {
+        let response = match self.command_client.clone().create_role(request).await {
             Ok(response) => {
                 self.complete_tracing_success(&tracing_ctx, method, "Successfully created Role")
                     .await;
@@ -535,7 +518,7 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.command_client.lock().await.update_role(request).await {
+        let response = match self.command_client.clone().update_role(request).await {
             Ok(response) => {
                 self.complete_tracing_success(&tracing_ctx, method, "Successfully updated Role")
                     .await;
@@ -587,7 +570,7 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.command_client.lock().await.trashed_role(request).await {
+        let response = match self.command_client.clone().trashed_role(request).await {
             Ok(response) => {
                 self.complete_tracing_success(
                     &tracing_ctx,
@@ -641,7 +624,7 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.command_client.lock().await.restore_role(request).await {
+        let response = match self.command_client.clone().restore_role(request).await {
             Ok(response) => {
                 self.complete_tracing_success(&tracing_ctx, method, "Successfully restored Role")
                     .await;
@@ -693,8 +676,7 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
 
         let response = match self
             .command_client
-            .lock()
-            .await
+            .clone()
             .delete_role_permanent(request)
             .await
         {
@@ -738,13 +720,7 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self
-            .command_client
-            .lock()
-            .await
-            .restore_all_role(request)
-            .await
-        {
+        let response = match self.command_client.clone().restore_all_role(request).await {
             Ok(response) => {
                 self.complete_tracing_success(&tracing_ctx, method, "All Roles restored")
                     .await;
@@ -787,8 +763,7 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
 
         let response = match self
             .command_client
-            .lock()
-            .await
+            .clone()
             .delete_all_role_permanent(request)
             .await
         {

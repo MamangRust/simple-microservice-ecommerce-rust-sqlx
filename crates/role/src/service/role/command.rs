@@ -14,44 +14,44 @@ use shared::{
     errors::ServiceError,
     utils::{MetadataInjector, Method, Metrics, Status as StatusUtils, TracingContext},
 };
-
+use anyhow::Result;
 use async_trait::async_trait;
 use genproto::order::FindByIdOrderRequest;
 use opentelemetry::{
-    Context, KeyValue,
+Context, KeyValue,
     global::{self, BoxedTracer},
     trace::{Span, SpanKind, TraceContextExt, Tracer},
 };
 use prometheus_client::registry::Registry;
-use std::sync::Arc;
-use tokio::{sync::Mutex, time::Instant};
+use tokio::time::Instant;
 use tonic::Request;
 use tracing::{error, info};
 
 #[derive(Clone)]
 pub struct RoleCommandService {
     pub command: DynRoleCommandRepository,
-    pub metrics: Arc<Mutex<Metrics>>,
+    pub metrics: Metrics,
 }
 
 impl RoleCommandService {
-    pub async fn new(
+    pub fn new(
         command: DynRoleCommandRepository,
-        metrics: Arc<Mutex<Metrics>>,
-        registry: Arc<Mutex<Registry>>,
-    ) -> Self {
-        registry.lock().await.register(
+        registry: &mut Registry,
+    ) -> Result<Self> {
+        let metrics = Metrics::new();
+
+        registry.register(
             "role_command_service_request_counter",
             "Total number of requests to the RoleCommandService",
-            metrics.lock().await.request_counter.clone(),
+            metrics.request_counter.clone(),
         );
-        registry.lock().await.register(
+        registry.register(
             "role_command_service_request_duration",
             "Histogram of request durations for the RoleCommandService",
-            metrics.lock().await.request_duration.clone(),
+            metrics.request_duration.clone(),
         );
 
-        Self { command, metrics }
+        Ok(Self { command, metrics })
     }
 
     fn get_tracer(&self) -> BoxedTracer {
@@ -137,7 +137,7 @@ impl RoleCommandService {
             error!("❌ Operation failed: {message}");
         }
 
-        self.metrics.lock().await.record(method, status, elapsed);
+        self.metrics.record(method, status, elapsed);
 
         tracing_ctx.cx.span().end();
     }

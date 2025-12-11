@@ -18,6 +18,7 @@ use shared::utils::shutdown_signal;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_http::limit::RequestBodyLimitLayer;
+use tracing::info;
 use utoipa::{Modify, OpenApi, openapi::security::SecurityScheme};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_swagger_ui::SwaggerUi;
@@ -126,7 +127,7 @@ impl Modify for SecurityAddon {
 pub async fn metrics_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let mut buffer = String::new();
 
-    let registry = state.registry.lock().await;
+    let registry = state.registry.clone();
 
     if let Err(e) = encode(&mut buffer, &registry) {
         return Response::builder()
@@ -163,7 +164,7 @@ impl AppRouter {
 
         let router_with_layers = api_router
             .layer(DefaultBodyLimit::disable())
-            .layer(RequestBodyLimitLayer::new(250 * 1024 * 1024));
+            .layer(RequestBodyLimitLayer::new(2 * 1024 * 1024));
 
         let (app_router, api) = router_with_layers.split_for_parts();
 
@@ -173,10 +174,10 @@ impl AppRouter {
         let addr = format!("0.0.0.0:{port}");
         let listener = TcpListener::bind(&addr).await?;
 
-        println!("🚀 Server running on http://{}", listener.local_addr()?);
-        println!("📚 API Documentation available at:");
-        println!("   📖 Swagger UI: http://localhost:{port}/swagger-ui");
-        println!("   📊 Metrics: http://localhost:{port}/metrics");
+        info!("🚀 Server running on http://{}", listener.local_addr()?);
+        info!("📚 API Documentation available at:");
+        info!("   📖 Swagger UI: http://localhost:{port}/swagger-ui");
+        info!("   📊 Metrics: http://localhost:{port}/metrics");
 
         axum::serve(listener, app)
             .with_graceful_shutdown(shutdown_signal())

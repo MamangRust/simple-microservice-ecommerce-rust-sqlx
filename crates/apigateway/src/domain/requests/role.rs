@@ -21,6 +21,7 @@ fn default_page() -> i32 {
 fn default_page_size() -> i32 {
     10
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 pub struct CreateRoleRequest {
     #[validate(length(min = 1))]

@@ -9,16 +9,14 @@ use genproto::product::{
     product_query_service_client::ProductQueryServiceClient as ProductQueryServiceGrpcClient,
 };
 use shared::errors::AppErrorGrpc;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use tonic::{Request, transport::Channel};
 
 pub struct ProductGrpcClientService {
-    client: Arc<Mutex<ProductQueryServiceGrpcClient<Channel>>>,
+    client: ProductQueryServiceGrpcClient<Channel>,
 }
 
 impl ProductGrpcClientService {
-    pub async fn new(client: Arc<Mutex<ProductQueryServiceGrpcClient<Channel>>>) -> Self {
+    pub async fn new(client: ProductQueryServiceGrpcClient<Channel>) -> Self {
         Self { client }
     }
 }
@@ -28,7 +26,7 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
     async fn find_by_id(&self, id: i32) -> Result<ApiResponse<ProductResponse>, AppErrorGrpc> {
         let req = Request::new(FindByIdProductRequest { id });
 
-        let mut client = self.client.lock().await;
+        let mut client = self.client.clone();
 
         let response = client.find_by_id(req).await.map_err(AppErrorGrpc::from)?;
 

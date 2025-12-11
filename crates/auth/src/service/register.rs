@@ -24,16 +24,15 @@ use shared::{
         TracingContext, generate_random_string,
     },
 };
+use anyhow::Result;
 use std::sync::Arc;
-use tokio::{sync::Mutex, time::Instant};
+use tokio::time::Instant;
 use tonic::Request;
 use tracing::{error, info};
 
 pub struct RegisterServiceDeps {
     pub user_client: DynUserGrpcClient,
     pub kafka: DynKafka,
-    pub metrics: Arc<Mutex<Metrics>>,
-    pub registry: Arc<Mutex<Registry>>,
     pub cache_store: Arc<CacheStore>,
 }
 
@@ -41,37 +40,37 @@ pub struct RegisterServiceDeps {
 pub struct RegisterService {
     user_client: DynUserGrpcClient,
     kafka: DynKafka,
-    metrics: Arc<Mutex<Metrics>>,
+    metrics: Metrics,
     cache_store: Arc<CacheStore>,
 }
 
 impl RegisterService {
-    pub async fn new(deps: RegisterServiceDeps) -> Self {
+    pub fn new(deps: RegisterServiceDeps, registry: &mut Registry) -> Result<Self> {
+        let metrics = Metrics::new();
+
         let RegisterServiceDeps {
             user_client,
             kafka,
-            metrics,
-            registry,
             cache_store,
         } = deps;
 
-        registry.lock().await.register(
+        registry.register(
             "register_service_request_counter",
             "Total number of requests to the RegisterService",
-            metrics.lock().await.request_counter.clone(),
+            metrics.request_counter.clone(),
         );
-        registry.lock().await.register(
+        registry.register(
             "register_service_request_duration",
             "Histogram of request durations for the RegisterService",
-            metrics.lock().await.request_duration.clone(),
+            metrics.request_duration.clone(),
         );
 
-        Self {
+        Ok(Self {
             user_client,
             kafka,
             metrics,
             cache_store,
-        }
+        })
     }
 
     fn get_tracer(&self) -> BoxedTracer {
@@ -157,7 +156,7 @@ impl RegisterService {
             error!("❌ Operation failed: {message}");
         }
 
-        self.metrics.lock().await.record(method, status, elapsed);
+        self.metrics.record(method, status, elapsed);
 
         tracing_ctx.cx.span().end();
     }

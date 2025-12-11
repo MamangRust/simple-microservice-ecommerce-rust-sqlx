@@ -1,5 +1,5 @@
 use crate::{
-    abstract_trait::role::DynRoleGrpcClient,
+    abstract_trait::{role::DynRoleGrpcClient, session::DynSessionMiddleware},
     domain::{
         requests::role::{CreateRoleRequest, FindAllRole, UpdateRoleRequest},
         response::{
@@ -42,8 +42,26 @@ use utoipa_axum::router::OpenApiRouter;
 )]
 pub async fn get_roles(
     Extension(service): Extension<DynRoleGrpcClient>,
+    Extension(user_id): Extension<i32>,
+    Extension(session): Extension<DynSessionMiddleware>,
     Query(params): Query<FindAllRole>,
 ) -> Result<impl IntoResponse, HttpError> {
+    let key = format!("session:{user_id}");
+
+    let current_session = session
+        .get_session(&key)
+        .ok_or_else(|| HttpError::Unauthorized("Session expired or not found".to_string()))?;
+
+    if !current_session
+        .roles
+        .iter()
+        .any(|r| r == "ROLE_ADMIN" || r == "ROLE_MODERATOR")
+    {
+        return Err(HttpError::Forbidden(
+            "Access denied. Required role: ADMIN or MODERATOR".to_string(),
+        ));
+    }
+
     let response = service.find_all(&params).await?;
     Ok((StatusCode::OK, Json(response)))
 }
@@ -62,8 +80,26 @@ pub async fn get_roles(
 )]
 pub async fn get_active_roles(
     Extension(service): Extension<DynRoleGrpcClient>,
+    Extension(user_id): Extension<i32>,
+    Extension(session): Extension<DynSessionMiddleware>,
     Query(params): Query<FindAllRole>,
 ) -> Result<impl IntoResponse, HttpError> {
+    let key = format!("session:{user_id}");
+
+    let current_session = session
+        .get_session(&key)
+        .ok_or_else(|| HttpError::Unauthorized("Session expired or not found".to_string()))?;
+
+    if !current_session
+        .roles
+        .iter()
+        .any(|r| r == "ROLE_ADMIN" || r == "ROLE_MODERATOR")
+    {
+        return Err(HttpError::Forbidden(
+            "Access denied. Required role: ADMIN or MODERATOR".to_string(),
+        ));
+    }
+
     let response = service.find_active(&params).await?;
     Ok((StatusCode::OK, Json(response)))
 }
@@ -82,8 +118,26 @@ pub async fn get_active_roles(
 )]
 pub async fn get_trashed_roles(
     Extension(service): Extension<DynRoleGrpcClient>,
+    Extension(user_id): Extension<i32>,
+    Extension(session): Extension<DynSessionMiddleware>,
     Query(params): Query<FindAllRole>,
 ) -> Result<impl IntoResponse, HttpError> {
+    let key = format!("session:{user_id}");
+
+    let current_session = session
+        .get_session(&key)
+        .ok_or_else(|| HttpError::Unauthorized("Session expired or not found".to_string()))?;
+
+    if !current_session
+        .roles
+        .iter()
+        .any(|r| r == "ROLE_ADMIN" || r == "ROLE_MODERATOR")
+    {
+        return Err(HttpError::Forbidden(
+            "Access denied. Required role: ADMIN or MODERATOR".to_string(),
+        ));
+    }
+
     let response = service.find_trashed(&params).await?;
     Ok((StatusCode::OK, Json(response)))
 }

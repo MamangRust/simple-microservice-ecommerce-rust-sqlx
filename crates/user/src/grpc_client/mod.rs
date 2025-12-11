@@ -4,8 +4,7 @@ use genproto::{
     role::role_query_service_client::RoleQueryServiceClient,
     user_role::user_role_service_client::UserRoleServiceClient,
 };
-use std::sync::Arc;
-use tokio::sync::Mutex;
+use std::time::Duration;
 use tonic::transport::{Channel, Endpoint};
 
 pub mod role;
@@ -13,8 +12,8 @@ pub mod user_role;
 
 #[derive(Clone)]
 pub struct GrpcClients {
-    pub role_client: Arc<Mutex<RoleQueryServiceClient<Channel>>>,
-    pub user_role_client: Arc<Mutex<UserRoleServiceClient<Channel>>>,
+    pub role_client: RoleQueryServiceClient<Channel>,
+    pub user_role_client: UserRoleServiceClient<Channel>,
 }
 
 impl GrpcClients {
@@ -22,12 +21,12 @@ impl GrpcClients {
         let role_channel = Self::connect(config.role, "role-service").await?;
 
         Ok(Self {
-            role_client: Arc::new(Mutex::new(RoleQueryServiceClient::new(
+            role_client: RoleQueryServiceClient::new(
                 role_channel.clone(),
-            ))),
-            user_role_client: Arc::new(Mutex::new(UserRoleServiceClient::new(
+            ),
+            user_role_client: UserRoleServiceClient::new(
                 role_channel.clone(),
-            ))),
+            ),
         })
     }
 
@@ -35,7 +34,15 @@ impl GrpcClients {
         let endpoint = Endpoint::from_shared(addr.clone())
             .with_context(|| format!("Invalid gRPC address for {service}: {addr}"))?;
 
-        endpoint
+        let configured_endpoint = endpoint
+            .connect_timeout(Duration::from_secs(3))
+            .timeout(Duration::from_secs(10))
+            .http2_keep_alive_interval(Duration::from_secs(30))
+            .http2_keep_alive_interval(Duration::from_secs(5))
+            .initial_connection_window_size(1_048_576)
+            .initial_stream_window_size(1_048_576);
+
+        configured_endpoint
             .connect()
             .await
             .with_context(|| format!("Failed to connect to {service} at {addr}"))

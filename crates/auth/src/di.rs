@@ -10,16 +10,14 @@ use crate::{
         token::TokenService,
     },
 };
-use anyhow::Result;
+use anyhow::{Result, Context};
 use prometheus_client::registry::Registry;
 use shared::{
     abstract_trait::{DynHashing, DynJwtService, DynKafka},
     cache::CacheStore,
     config::{ConnectionPool, RedisClient},
-    utils::Metrics,
 };
 use std::{fmt, sync::Arc};
-use tokio::sync::Mutex;
 
 #[derive(Clone)]
 pub struct DependenciesInject {
@@ -46,20 +44,16 @@ pub struct DependenciesInjectDeps {
     pub hash: DynHashing,
     pub jwt_config: DynJwtService,
     pub kafka: DynKafka,
-    pub metrics: Arc<Mutex<Metrics>>,
-    pub registry: Arc<Mutex<Registry>>,
     pub redis: RedisClient,
 }
 
 impl DependenciesInject {
-    pub async fn new(deps: DependenciesInjectDeps, clients: GrpcClients) -> Result<Self> {
+    pub async fn new(deps: DependenciesInjectDeps, clients: GrpcClients, registry: &mut Registry) -> Result<Self> {
         let DependenciesInjectDeps {
             hash,
             pool,
             jwt_config,
             kafka,
-            metrics,
-            registry,
             redis,
         } = deps;
 
@@ -72,19 +66,16 @@ impl DependenciesInject {
             UserGrpcClientService::new(
                 clients.user_query_client.clone(),
                 clients.user_command_client.clone(),
-            )
-            .await,
+            ),
         );
 
         let register_deps = RegisterServiceDeps {
             user_client: user_client.clone(),
             kafka: kafka.clone(),
-            metrics: metrics.clone(),
-            registry: registry.clone(),
             cache_store: cache.clone(),
         };
 
-        let register_service = RegisterService::new(register_deps).await;
+        let register_service = RegisterService::new(register_deps, registry).context("failed initialize register")?;
 
         let token_service = Arc::new(TokenService::new(
             jwt_config.clone(),
@@ -95,36 +86,30 @@ impl DependenciesInject {
             hash,
             token_service: token_service.clone(),
             user_client: user_client.clone(),
-            metrics: metrics.clone(),
-            registry: registry.clone(),
             cache_store: cache.clone(),
         };
 
-        let login_service = LoginService::new(login_deps).await;
+        let login_service = LoginService::new(login_deps, registry).context("failed initialize login")?;
 
         let identity_deps = IdentityServiceDeps {
             refresh_token_command: refresh_token.command.clone(),
             jwt: jwt_config,
             token_service: token_service.clone(),
             user_client: user_client.clone(),
-            metrics: metrics.clone(),
-            registry: registry.clone(),
             cache_store: cache.clone(),
         };
 
-        let identity_service = IdentityService::new(identity_deps).await;
+        let identity_service = IdentityService::new(identity_deps, registry).context("failed initialize identity")?;
 
         let password_deps = PasswordResetServiceDeps {
             reset_token_query: reset_token.query,
             reset_token_command: reset_token.command,
             user_client: user_client.clone(),
             kafka: kafka.clone(),
-            metrics: metrics.clone(),
-            registry: registry.clone(),
             cache_store: cache.clone(),
         };
 
-        let password_reset_service = PasswordResetService::new(password_deps).await;
+        let password_reset_service = PasswordResetService::new(password_deps, registry).context("failed iniliazlie password reset")?;
 
         Ok(Self {
             login_service,

@@ -26,41 +26,42 @@ use shared::{
     errors::{AppErrorGrpc, HttpError},
     utils::{MetadataInjector, Method, Metrics, Status as StatusUtils, TracingContext},
 };
-use std::sync::Arc;
-use tokio::{sync::Mutex, time::Instant};
+use tokio::time::Instant;
 use tonic::{Request, transport::Channel};
 use tracing::{error, info};
+use anyhow::Result;
 
 #[derive(Debug, Clone)]
 pub struct UserGrpcClientService {
-    query_client: Arc<Mutex<UserQueryServiceClient<Channel>>>,
-    command_client: Arc<Mutex<UserCommandServiceClient<Channel>>>,
-    metrics: Arc<Mutex<Metrics>>,
+    query_client: UserQueryServiceClient<Channel>,
+    command_client: UserCommandServiceClient<Channel>,
+    metrics: Metrics,
 }
 
 impl UserGrpcClientService {
-    pub async fn new(
-        query_client: Arc<Mutex<UserQueryServiceClient<Channel>>>,
-        command_client: Arc<Mutex<UserCommandServiceClient<Channel>>>,
-        metrics: Arc<Mutex<Metrics>>,
-        registry: Arc<Mutex<Registry>>,
-    ) -> Self {
-        registry.lock().await.register(
+    pub fn new(
+        query_client: UserQueryServiceClient<Channel>,
+        command_client: UserCommandServiceClient<Channel>,
+        registry: &mut Registry,
+    ) -> Result<Self> {
+        let metrics = Metrics::new();
+
+        registry.register(
             "user_service_client_request_counter",
             "Total number of requests to the UserGrpcClientService",
-            metrics.lock().await.request_counter.clone(),
+            metrics.request_counter.clone(),
         );
-        registry.lock().await.register(
+        registry.register(
             "user_service_client_duration",
             "Histogram of request durations for the UserGrpcClientService",
-            metrics.lock().await.request_duration.clone(),
+            metrics.request_duration.clone(),
         );
 
-        Self {
+        Ok(Self {
             query_client,
             command_client,
             metrics,
-        }
+        })
     }
     fn get_tracer(&self) -> BoxedTracer {
         global::tracer("user-client-service")
@@ -145,7 +146,7 @@ impl UserGrpcClientService {
             error!("Operation failed: {message}");
         }
 
-        self.metrics.lock().await.record(method, status, elapsed);
+        self.metrics.record(method, status, elapsed);
 
         tracing_ctx.cx.span().end();
     }
@@ -182,7 +183,7 @@ impl UserGrpcClientTrait for UserGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.query_client.lock().await.find_all(request).await {
+        let response = match self.query_client.clone().find_all(request).await {
             Ok(response) => {
                 self.complete_tracing_success(&tracing_ctx, method, "Successfully fetched users")
                     .await;
@@ -241,7 +242,7 @@ impl UserGrpcClientTrait for UserGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.query_client.lock().await.find_by_active(request).await {
+        let response = match self.query_client.clone().find_by_active(request).await {
             Ok(response) => {
                 self.complete_tracing_success(
                     &tracing_ctx,
@@ -304,13 +305,7 @@ impl UserGrpcClientTrait for UserGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self
-            .query_client
-            .lock()
-            .await
-            .find_by_trashed(request)
-            .await
-        {
+        let response = match self.query_client.clone().find_by_trashed(request).await {
             Ok(response) => {
                 self.complete_tracing_success(
                     &tracing_ctx,
@@ -361,7 +356,7 @@ impl UserGrpcClientTrait for UserGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.query_client.lock().await.find_by_id(request).await {
+        let response = match self.query_client.clone().find_by_id(request).await {
             Ok(response) => {
                 self.complete_tracing_success(&tracing_ctx, method, "Successfully fetched user")
                     .await;
@@ -429,7 +424,7 @@ impl UserGrpcClientTrait for UserGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.command_client.lock().await.update_user(request).await {
+        let response = match self.command_client.clone().update_user(request).await {
             Ok(response) => {
                 self.complete_tracing_success(&tracing_ctx, method, "User updated successfully")
                     .await;
@@ -481,7 +476,7 @@ impl UserGrpcClientTrait for UserGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.command_client.lock().await.trashed_user(request).await {
+        let response = match self.command_client.clone().trashed_user(request).await {
             Ok(response) => {
                 self.complete_tracing_success(
                     &tracing_ctx,
@@ -535,7 +530,7 @@ impl UserGrpcClientTrait for UserGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.command_client.lock().await.restore_user(request).await {
+        let response = match self.command_client.clone().restore_user(request).await {
             Ok(response) => {
                 self.complete_tracing_success(&tracing_ctx, method, "User restored successfully")
                     .await;
@@ -587,8 +582,7 @@ impl UserGrpcClientTrait for UserGrpcClientService {
 
         let response = match self
             .command_client
-            .lock()
-            .await
+            .clone()
             .delete_user_permanent(request)
             .await
         {
@@ -632,13 +626,7 @@ impl UserGrpcClientTrait for UserGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self
-            .command_client
-            .lock()
-            .await
-            .restore_all_user(request)
-            .await
-        {
+        let response = match self.command_client.clone().restore_all_user(request).await {
             Ok(response) => {
                 self.complete_tracing_success(&tracing_ctx, method, "All users restored")
                     .await;
@@ -681,8 +669,7 @@ impl UserGrpcClientTrait for UserGrpcClientService {
 
         let response = match self
             .command_client
-            .lock()
-            .await
+            .clone()
             .delete_all_user_permanent(request)
             .await
         {

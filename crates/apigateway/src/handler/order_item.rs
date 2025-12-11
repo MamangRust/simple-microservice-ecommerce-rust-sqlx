@@ -1,5 +1,5 @@
 use crate::{
-    abstract_trait::order_item::DynOrderItemGrpcClient,
+    abstract_trait::{order_item::DynOrderItemGrpcClient, session::DynSessionMiddleware},
     domain::{
         requests::order_item::FindAllOrderItems,
         response::{
@@ -40,8 +40,26 @@ use utoipa_axum::router::OpenApiRouter;
 )]
 pub async fn get_order_items(
     Extension(service): Extension<DynOrderItemGrpcClient>,
+    Extension(user_id): Extension<i32>,
+    Extension(session): Extension<DynSessionMiddleware>,
     Query(params): Query<FindAllOrderItems>,
 ) -> Result<impl IntoResponse, HttpError> {
+    let key = format!("session:{user_id}");
+
+    let current_session = session
+        .get_session(&key)
+        .ok_or_else(|| HttpError::Unauthorized("Session expired or not found".to_string()))?;
+
+    if !current_session
+        .roles
+        .iter()
+        .any(|r| r == "ROLE_ADMIN" || r == "ROLE_MODERATOR")
+    {
+        return Err(HttpError::Forbidden(
+            "Access denied. Required role: ADMIN or MODERATOR".to_string(),
+        ));
+    }
+
     let response = service.find_all(&params).await?;
     Ok((StatusCode::OK, Json(response)))
 }
@@ -60,8 +78,25 @@ pub async fn get_order_items(
 )]
 pub async fn get_active_order_items(
     Extension(service): Extension<DynOrderItemGrpcClient>,
+    Extension(user_id): Extension<i32>,
+    Extension(session): Extension<DynSessionMiddleware>,
     Query(params): Query<FindAllOrderItems>,
 ) -> Result<impl IntoResponse, HttpError> {
+    let key = format!("session:{user_id}");
+
+    let current_session = session
+        .get_session(&key)
+        .ok_or_else(|| HttpError::Unauthorized("Session expired or not found".to_string()))?;
+
+    if !current_session
+        .roles
+        .iter()
+        .any(|r| r == "ROLE_ADMIN" || r == "ROLE_MODERATOR")
+    {
+        return Err(HttpError::Forbidden(
+            "Access denied. Required role: ADMIN or MODERATOR".to_string(),
+        ));
+    }
     let response = service.find_by_active(&params).await?;
     Ok((StatusCode::OK, Json(response)))
 }
@@ -80,8 +115,26 @@ pub async fn get_active_order_items(
 )]
 pub async fn get_trashed_order_items(
     Extension(service): Extension<DynOrderItemGrpcClient>,
+    Extension(user_id): Extension<i32>,
+    Extension(session): Extension<DynSessionMiddleware>,
     Query(params): Query<FindAllOrderItems>,
 ) -> Result<impl IntoResponse, HttpError> {
+    let key = format!("session:{user_id}");
+
+    let current_session = session
+        .get_session(&key)
+        .ok_or_else(|| HttpError::Unauthorized("Session expired or not found".to_string()))?;
+
+    if !current_session
+        .roles
+        .iter()
+        .any(|r| r == "ROLE_ADMIN" || r == "ROLE_MODERATOR")
+    {
+        return Err(HttpError::Forbidden(
+            "Access denied. Required role: ADMIN or MODERATOR".to_string(),
+        ));
+    }
+
     let response = service.find_by_trashed(&params).await?;
     Ok((StatusCode::OK, Json(response)))
 }
@@ -103,8 +156,26 @@ pub async fn get_trashed_order_items(
 )]
 pub async fn get_items_by_order_id(
     Extension(service): Extension<DynOrderItemGrpcClient>,
+    Extension(user_id): Extension<i32>,
+    Extension(session): Extension<DynSessionMiddleware>,
     Path(order_id): Path<i32>,
 ) -> Result<impl IntoResponse, HttpError> {
+    let key = format!("session:{user_id}");
+
+    let current_session = session
+        .get_session(&key)
+        .ok_or_else(|| HttpError::Unauthorized("Session expired or not found".to_string()))?;
+
+    if !current_session
+        .roles
+        .iter()
+        .any(|r| r == "ROLE_ADMIN" || r == "ROLE_MODERATOR")
+    {
+        return Err(HttpError::Forbidden(
+            "Access denied. Required role: ADMIN or MODERATOR".to_string(),
+        ));
+    }
+
     let response = service.find_order_item_by_order(order_id).await?;
     Ok((StatusCode::OK, Json(response)))
 }

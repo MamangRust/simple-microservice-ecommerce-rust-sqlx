@@ -1,3 +1,4 @@
+use std::time::Duration;
 use crate::config::grpc_config::GrpcClientConfig;
 use anyhow::{Context, Result};
 use genproto::{
@@ -8,8 +9,6 @@ use genproto::{
     },
     user_role::user_role_service_client::UserRoleServiceClient,
 };
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use tonic::transport::{Channel, Endpoint};
 
 pub mod role;
@@ -18,10 +17,10 @@ pub mod user_role;
 
 #[derive(Clone)]
 pub struct GrpcClients {
-    pub user_query_client: Arc<Mutex<UserQueryServiceClient<Channel>>>,
-    pub user_command_client: Arc<Mutex<UserCommandServiceClient<Channel>>>,
-    pub role_client: Arc<Mutex<RoleQueryServiceClient<Channel>>>,
-    pub user_role_client: Arc<Mutex<UserRoleServiceClient<Channel>>>,
+    pub user_query_client: UserQueryServiceClient<Channel>,
+    pub user_command_client: UserCommandServiceClient<Channel>,
+    pub role_client: RoleQueryServiceClient<Channel>,
+    pub user_role_client: UserRoleServiceClient<Channel>,
 }
 
 impl GrpcClients {
@@ -30,16 +29,10 @@ impl GrpcClients {
         let role_channel = Self::connect(config.role, "role-service").await?;
 
         Ok(Self {
-            user_command_client: Arc::new(Mutex::new(UserCommandServiceClient::new(
-                user_channel.clone(),
-            ))),
-            user_query_client: Arc::new(Mutex::new(UserQueryServiceClient::new(user_channel))),
-            role_client: Arc::new(Mutex::new(RoleQueryServiceClient::new(
-                role_channel.clone(),
-            ))),
-            user_role_client: Arc::new(Mutex::new(UserRoleServiceClient::new(
-                role_channel.clone(),
-            ))),
+            user_command_client: UserCommandServiceClient::new(user_channel.clone()),
+            user_query_client: UserQueryServiceClient::new(user_channel),
+            role_client: RoleQueryServiceClient::new(role_channel.clone()),
+            user_role_client: UserRoleServiceClient::new(role_channel.clone()),
         })
     }
 
@@ -47,7 +40,15 @@ impl GrpcClients {
         let endpoint = Endpoint::from_shared(addr.clone())
             .with_context(|| format!("Invalid gRPC address for {service}: {addr}"))?;
 
-        endpoint
+        let configured_endpoint = endpoint
+            .connect_timeout(Duration::from_secs(3))
+            .timeout(Duration::from_secs(10))
+            .http2_keep_alive_interval(Duration::from_secs(30))
+            .http2_keep_alive_interval(Duration::from_secs(5))
+            .initial_connection_window_size(1_048_576)
+            .initial_stream_window_size(1_048_576);
+
+        configured_endpoint
             .connect()
             .await
             .with_context(|| format!("Failed to connect to {service} at {addr}"))

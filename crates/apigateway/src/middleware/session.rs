@@ -46,7 +46,6 @@ pub async fn session_middleware(
 
     let session = Session {
         user_id: user_id.to_string(),
-        email: "".to_owned(),
         roles,
     };
 

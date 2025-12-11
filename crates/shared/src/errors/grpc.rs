@@ -21,6 +21,10 @@ impl From<AppErrorGrpc> for Status {
                     Status::invalid_argument(format!("Validation failed: {errors:#?}"))
                 }
 
+                ServiceError::Forbidden(msg) => {
+                    Status::permission_denied(msg)
+                }
+
                 ServiceError::Repo(repo_err) => match repo_err {
                     RepositoryError::NotFound => Status::not_found("Not found"),
                     RepositoryError::Conflict(msg) => Status::already_exists(&msg),
@@ -61,6 +65,12 @@ impl From<Status> for AppErrorGrpc {
 
             tonic::Code::NotFound => {
                 AppErrorGrpc::Service(ServiceError::Repo(RepositoryError::NotFound))
+            }
+
+            tonic::Code::PermissionDenied => {
+                AppErrorGrpc::Service(ServiceError::Forbidden(
+                    status.message().to_string()
+                ))
             }
 
             tonic::Code::AlreadyExists => AppErrorGrpc::Service(ServiceError::Repo(

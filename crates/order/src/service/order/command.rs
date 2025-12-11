@@ -35,9 +35,9 @@ use opentelemetry::{
     trace::{Span, SpanKind, TraceContextExt, Tracer},
 };
 use prometheus_client::registry::Registry;
-use std::sync::Arc;
-use tokio::{sync::Mutex, time::Instant};
+use tokio::time::Instant;
 use tonic::Request;
+use anyhow::Result;
 use tracing::{error, info};
 
 #[derive(Clone)]
@@ -48,7 +48,7 @@ pub struct OrderCommandService {
     order_item_command: DynOrderItemCommandRepository,
     query: DynOrderQueryRepository,
     kafka: DynKafka,
-    metrics: Arc<Mutex<Metrics>>,
+    metrics: Metrics,
 }
 
 pub struct OrderCommandServiceDeps {
@@ -58,12 +58,12 @@ pub struct OrderCommandServiceDeps {
     pub command: DynOrderCommandRepository,
     pub query: DynOrderQueryRepository,
     pub kafka: DynKafka,
-    pub metrics: Arc<Mutex<Metrics>>,
-    pub registry: Arc<Mutex<Registry>>,
 }
 
 impl OrderCommandService {
-    pub async fn new(deps: OrderCommandServiceDeps) -> Self {
+    pub fn new(deps: OrderCommandServiceDeps, registry: &mut Registry) -> Result<Self> {
+        let metrics = Metrics::new();
+
         let OrderCommandServiceDeps {
             order_item_command,
             order_item_query,
@@ -71,22 +71,20 @@ impl OrderCommandService {
             command,
             query,
             kafka,
-            metrics,
-            registry,
         } = deps;
 
-        registry.lock().await.register(
+        registry.register(
             "order_command_service_request_counter",
             "Total number of requests to the OrderCommandService",
-            metrics.lock().await.request_counter.clone(),
+            metrics.request_counter.clone(),
         );
-        registry.lock().await.register(
+        registry.register(
             "order_command_service_request_duration",
             "Histogram of request durations for the OrderCommandService",
-            metrics.lock().await.request_duration.clone(),
+            metrics.request_duration.clone(),
         );
 
-        Self {
+        Ok(Self {
             order_item_query,
             order_item_command,
             product_client,
@@ -94,7 +92,7 @@ impl OrderCommandService {
             query,
             kafka,
             metrics,
-        }
+        })
     }
     fn get_tracer(&self) -> BoxedTracer {
         global::tracer("order-command-service")
@@ -179,7 +177,7 @@ impl OrderCommandService {
             error!("❌ Operation failed: {message}");
         }
 
-        self.metrics.lock().await.record(method, status, elapsed);
+        self.metrics.record(method, status, elapsed);
 
         tracing_ctx.cx.span().end();
     }

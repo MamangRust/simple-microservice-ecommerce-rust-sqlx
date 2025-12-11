@@ -12,16 +12,14 @@ use genproto::user_role::{
     user_role_service_client::UserRoleServiceClient as UserRoleServiceGrpcClient,
 };
 use shared::errors::AppErrorGrpc;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use tonic::{Request, transport::Channel};
 
 pub struct UserRoleGrpcClientService {
-    client: Arc<Mutex<UserRoleServiceGrpcClient<Channel>>>,
+    client: UserRoleServiceGrpcClient<Channel>,
 }
 
 impl UserRoleGrpcClientService {
-    pub async fn new(client: Arc<Mutex<UserRoleServiceGrpcClient<Channel>>>) -> Self {
+    pub fn new(client: UserRoleServiceGrpcClient<Channel>) -> Self {
         Self { client }
     }
 }
@@ -37,7 +35,7 @@ impl UserRoleGrpcClientTrait for UserRoleGrpcClientService {
             roleid: req.role_id,
         });
 
-        let mut client = self.client.lock().await;
+        let mut client = self.client.clone();
 
         let response = client.assign_role(req).await.map_err(AppErrorGrpc::from)?;
 
@@ -65,7 +63,7 @@ impl UserRoleGrpcClientTrait for UserRoleGrpcClientService {
             roleid: req.role_id,
         });
 
-        let mut client = self.client.lock().await;
+        let mut client = self.client.clone();
 
         let response = client.update_role(req).await.map_err(AppErrorGrpc::from)?;
 

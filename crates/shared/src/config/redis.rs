@@ -27,7 +27,7 @@ pub struct RedisClient {
 }
 
 impl RedisClient {
-    pub async fn new(config: &RedisConfig) -> Result<Self> {
+    pub fn new(config: &RedisConfig) -> Result<Self> {
         info!("Creating redis client");
 
         let url = match &config.password {

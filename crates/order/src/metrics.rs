@@ -11,7 +11,7 @@ use std::sync::Arc;
 pub async fn metrics_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let mut buffer = String::new();
 
-    let registry = state.registry.lock().await;
+    let registry = state.registry.clone();
 
     if let Err(e) = encode(&mut buffer, &registry) {
         return Response::builder()

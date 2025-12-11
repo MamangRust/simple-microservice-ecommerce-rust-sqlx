@@ -32,8 +32,8 @@ use shared::{
     errors::ServiceError,
     utils::{MetadataInjector, Method, Metrics, Status as StatusUtils, TracingContext},
 };
-use std::sync::Arc;
-use tokio::{sync::Mutex, time::Instant};
+use anyhow::Result;
+use tokio::time::Instant;
 use tonic::Request;
 use tracing::{error, info};
 
@@ -44,7 +44,7 @@ pub struct UserCommandService {
     pub user_role_client: DynUserRoleGrpcClient,
     pub query: DynUserQueryRepository,
     pub command: DynUserCommandRepository,
-    pub metrics: Arc<Mutex<Metrics>>,
+    pub metrics: Metrics,
 }
 
 pub struct UserCommandServiceDeps {
@@ -53,41 +53,39 @@ pub struct UserCommandServiceDeps {
     pub hash: DynHashing,
     pub query: DynUserQueryRepository,
     pub command: DynUserCommandRepository,
-    pub metrics: Arc<Mutex<Metrics>>,
-    pub registry: Arc<Mutex<Registry>>,
 }
 
 impl UserCommandService {
-    pub async fn new(deps: UserCommandServiceDeps) -> Self {
+    pub fn new(deps: UserCommandServiceDeps, registry: &mut Registry) -> Result<Self> {
+        let metrics = Metrics::default();
+
         let UserCommandServiceDeps {
             role_client,
             user_role_client,
             query,
             command,
-            metrics,
             hash,
-            registry,
         } = deps;
 
-        registry.lock().await.register(
+        registry.register(
             "user_command_service_request_counter",
             "Total number of requests to the UserCommandService",
-            metrics.lock().await.request_counter.clone(),
+            metrics.request_counter.clone(),
         );
-        registry.lock().await.register(
+        registry.register(
             "user_command_service_request_duration",
             "Histogram of request durations for the UserCommandService",
-            metrics.lock().await.request_duration.clone(),
+            metrics.request_duration.clone(),
         );
 
-        Self {
+        Ok(Self {
             role_client,
             user_role_client,
             query,
             command,
             metrics,
             hash,
-        }
+        })
     }
 
     fn get_tracer(&self) -> BoxedTracer {
@@ -173,7 +171,7 @@ impl UserCommandService {
             error!("Operation failed: {message}");
         }
 
-        self.metrics.lock().await.record(method, status, elapsed);
+        self.metrics.record(method, status, elapsed);
 
         tracing_ctx.cx.span().end();
     }

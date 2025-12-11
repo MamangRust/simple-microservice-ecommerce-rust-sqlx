@@ -21,19 +21,17 @@ use genproto::{
     },
 };
 use shared::errors::AppErrorGrpc;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use tonic::{Request, transport::Channel};
 
 pub struct UserGrpcClientService {
-    query_client: Arc<Mutex<UserQueryServiceClient<Channel>>>,
-    command_client: Arc<Mutex<UserCommandServiceClient<Channel>>>,
+    query_client: UserQueryServiceClient<Channel>,
+    command_client: UserCommandServiceClient<Channel>,
 }
 
 impl UserGrpcClientService {
-    pub async fn new(
-        query_client: Arc<Mutex<UserQueryServiceClient<Channel>>>,
-        command_client: Arc<Mutex<UserCommandServiceClient<Channel>>>,
+    pub fn new(
+        query_client: UserQueryServiceClient<Channel>,
+        command_client: UserCommandServiceClient<Channel>,
     ) -> Self {
         Self {
             query_client,
@@ -58,7 +56,7 @@ impl UserGrpcClientTrait for UserGrpcClientService {
             is_verified: req.is_verified,
         });
 
-        let mut client = self.command_client.lock().await;
+        let mut client = self.command_client.clone();
 
         let response = client.create_user(req).await.map_err(AppErrorGrpc::from)?;
 
@@ -86,7 +84,7 @@ impl UserGrpcClientTrait for UserGrpcClientService {
             is_verified: req.is_verified,
         });
 
-        let mut client = self.command_client.lock().await;
+        let mut client = self.command_client.clone();
 
         let response = client
             .update_user_is_verified(req)
@@ -117,7 +115,7 @@ impl UserGrpcClientTrait for UserGrpcClientService {
             password: req.password,
         });
 
-        let mut client = self.command_client.lock().await;
+        let mut client = self.command_client.clone();
 
         let response = client
             .update_user_password(req)
@@ -145,7 +143,7 @@ impl UserGrpcClientTrait for UserGrpcClientService {
     ) -> Result<ApiResponse<UserResponse>, AppErrorGrpc> {
         let request = Request::new(VerifyCodeRequest { code });
 
-        let mut client = self.query_client.lock().await;
+        let mut client = self.query_client.clone();
 
         let response = client
             .find_verification_code(request)
@@ -173,7 +171,7 @@ impl UserGrpcClientTrait for UserGrpcClientService {
     ) -> Result<ApiResponse<UserResponse>, AppErrorGrpc> {
         let request = Request::new(FindByEmailUserRequest { email });
 
-        let mut client = self.query_client.lock().await;
+        let mut client = self.query_client.clone();
 
         let response = client
             .find_by_email(request)
@@ -201,7 +199,7 @@ impl UserGrpcClientTrait for UserGrpcClientService {
     ) -> Result<ApiResponse<UserResponseWithPassword>, AppErrorGrpc> {
         let request = Request::new(FindByEmailUserRequest { email });
 
-        let mut client = self.query_client.lock().await;
+        let mut client = self.query_client.clone();
 
         let response = client
             .find_by_email_and_verify(request)
@@ -226,7 +224,7 @@ impl UserGrpcClientTrait for UserGrpcClientService {
     async fn find_by_id(&self, id: i32) -> Result<ApiResponse<UserResponse>, AppErrorGrpc> {
         let request = Request::new(FindByIdUserRequest { id });
 
-        let mut client = self.query_client.lock().await;
+        let mut client = self.query_client.clone();
 
         let response = client
             .find_by_id(request)

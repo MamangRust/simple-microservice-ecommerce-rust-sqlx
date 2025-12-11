@@ -7,23 +7,19 @@ use crate::{
         query::UserQueryService,
     },
 };
-use anyhow::Result;
+use anyhow::{Result, Context};
 use prometheus_client::registry::Registry;
 use shared::{
     abstract_trait::DynHashing,
     cache::CacheStore,
     config::{ConnectionPool, RedisClient},
-    utils::Metrics,
 };
 use std::{fmt, sync::Arc};
-use tokio::sync::Mutex;
 
 #[derive(Clone)]
 pub struct DependenciesInjectDeps {
     pub pool: ConnectionPool,
     pub hash: DynHashing,
-    pub metrics: Arc<Mutex<Metrics>>,
-    pub registry: Arc<Mutex<Registry>>,
     pub redis: RedisClient,
 }
 
@@ -43,12 +39,10 @@ impl fmt::Debug for DependenciesInject {
 }
 
 impl DependenciesInject {
-    pub async fn new(deps: DependenciesInjectDeps, clients: GrpcClients) -> Result<Self> {
+    pub fn new(deps: DependenciesInjectDeps, clients: GrpcClients, registry: &mut Registry) -> Result<Self> {
         let DependenciesInjectDeps {
             hash,
             pool,
-            metrics,
-            registry,
             redis,
         } = deps;
 
@@ -56,19 +50,17 @@ impl DependenciesInject {
         let user_command_repo = Arc::new(UserCommandRepository::new(pool.clone()));
 
         let role_client: DynRoleGrpcClient =
-            Arc::new(RoleGrpcClientService::new(clients.role_client).await);
+            Arc::new(RoleGrpcClientService::new(clients.role_client));
         let user_role_client: DynUserRoleGrpcClient =
-            Arc::new(UserRoleGrpcClientService::new(clients.user_role_client).await);
+            Arc::new(UserRoleGrpcClientService::new(clients.user_role_client));
 
         let cache = Arc::new(CacheStore::new(redis.client.clone()));
 
         let user_query = UserQueryService::new(
             user_query_repo.clone(),
-            metrics.clone(),
-            registry.clone(),
+            registry,
             cache.clone(),
-        )
-        .await;
+        ).context("failed intialize user query")?;
 
         let user_command_deps = UserCommandServiceDeps {
             hash,
@@ -76,11 +68,9 @@ impl DependenciesInject {
             user_role_client,
             query: user_query_repo.clone(),
             command: user_command_repo,
-            metrics: metrics.clone(),
-            registry: registry.clone(),
         };
 
-        let user_command = UserCommandService::new(user_command_deps).await;
+        let user_command = UserCommandService::new(user_command_deps, registry).context("failed initialize user command")?;
 
         Ok(Self {
             user_query,

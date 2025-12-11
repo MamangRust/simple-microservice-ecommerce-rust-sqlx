@@ -28,41 +28,42 @@ use shared::{
     errors::{AppErrorGrpc, HttpError},
     utils::{MetadataInjector, Method, Metrics, Status as StatusUtils, TracingContext},
 };
-use std::sync::Arc;
-use tokio::{sync::Mutex, time::Instant};
+use anyhow::Result;
+use tokio::time::Instant;
 use tonic::{Request, transport::Channel};
 use tracing::{error, info};
 
 #[derive(Debug, Clone)]
 pub struct OrderGrpcClientService {
-    query_client: Arc<Mutex<OrderQueryServiceClient<Channel>>>,
-    command_client: Arc<Mutex<OrderCommandServiceClient<Channel>>>,
-    metrics: Arc<Mutex<Metrics>>,
+    query_client: OrderQueryServiceClient<Channel>,
+    command_client: OrderCommandServiceClient<Channel>,
+    metrics: Metrics,
 }
 
 impl OrderGrpcClientService {
-    pub async fn new(
-        query_client: Arc<Mutex<OrderQueryServiceClient<Channel>>>,
-        command_client: Arc<Mutex<OrderCommandServiceClient<Channel>>>,
-        metrics: Arc<Mutex<Metrics>>,
-        registry: Arc<Mutex<Registry>>,
-    ) -> Self {
-        registry.lock().await.register(
+    pub fn new(
+        query_client: OrderQueryServiceClient<Channel>,
+        command_client: OrderCommandServiceClient<Channel>,
+        registry: &mut Registry,
+    ) -> Result<Self> {
+        let metrics = Metrics::new();
+
+        registry.register(
             "order_service_client_request_counter",
             "Total number of requests to the OrderGrpcClientService",
-            metrics.lock().await.request_counter.clone(),
+            metrics.request_counter.clone(),
         );
-        registry.lock().await.register(
+        registry.register(
             "order_service_client_duration",
             "Histogram of request durations for the OrderGrpcClientService",
-            metrics.lock().await.request_duration.clone(),
+            metrics.request_duration.clone(),
         );
 
-        Self {
+        Ok(Self {
             query_client,
             command_client,
             metrics,
-        }
+        })
     }
 
     fn get_tracer(&self) -> BoxedTracer {
@@ -148,7 +149,7 @@ impl OrderGrpcClientService {
             error!("Operation failed: {message}");
         }
 
-        self.metrics.lock().await.record(method, status, elapsed);
+        self.metrics.record(method, status, elapsed);
 
         tracing_ctx.cx.span().end();
     }
@@ -185,7 +186,7 @@ impl OrderGrpcClientTrait for OrderGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.query_client.lock().await.find_all(request).await {
+        let response = match self.query_client.clone().find_all(request).await {
             Ok(resp) => {
                 self.complete_tracing_success(&tracing_ctx, method, "Successfully fetched orders")
                     .await;
@@ -249,7 +250,7 @@ impl OrderGrpcClientTrait for OrderGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.query_client.lock().await.find_by_active(request).await {
+        let response = match self.query_client.clone().find_by_active(request).await {
             Ok(resp) => {
                 self.complete_tracing_success(
                     &tracing_ctx,
@@ -319,8 +320,7 @@ impl OrderGrpcClientTrait for OrderGrpcClientService {
 
         let response = match self
             .query_client
-            .lock()
-            .await
+            .clone()
             .find_by_trashed(request)
             .await
         {
@@ -379,7 +379,7 @@ impl OrderGrpcClientTrait for OrderGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.query_client.lock().await.find_by_id(request).await {
+        let response = match self.query_client.clone().find_by_id(request).await {
             Ok(resp) => {
                 self.complete_tracing_success(
                     &tracing_ctx,
@@ -459,7 +459,7 @@ impl OrderGrpcClientTrait for OrderGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.command_client.lock().await.create(request).await {
+        let response = match self.command_client.clone().create(request).await {
             Ok(resp) => {
                 self.complete_tracing_success(&tracing_ctx, method, "Order created")
                     .await;
@@ -540,7 +540,7 @@ impl OrderGrpcClientTrait for OrderGrpcClientService {
                 .collect(),
         });
 
-        let response = match self.command_client.lock().await.update(request).await {
+        let response = match self.command_client.clone().update(request).await {
             Ok(resp) => {
                 self.complete_tracing_success(&tracing_ctx, method, "Order updated")
                     .await;
@@ -597,7 +597,7 @@ impl OrderGrpcClientTrait for OrderGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.command_client.lock().await.trashed(request).await {
+        let response = match self.command_client.clone().trashed(request).await {
             Ok(resp) => {
                 self.complete_tracing_success(&tracing_ctx, method, "Order soft deleted")
                     .await;
@@ -655,7 +655,7 @@ impl OrderGrpcClientTrait for OrderGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self.command_client.lock().await.restore(request).await {
+        let response = match self.command_client.clone().restore(request).await {
             Ok(resp) => {
                 self.complete_tracing_success(&tracing_ctx, method, "Order restored")
                     .await;
@@ -712,8 +712,7 @@ impl OrderGrpcClientTrait for OrderGrpcClientService {
 
         let response = match self
             .command_client
-            .lock()
-            .await
+            .clone()
             .delete_order_permanent(request)
             .await
         {
@@ -764,8 +763,7 @@ impl OrderGrpcClientTrait for OrderGrpcClientService {
 
         let response = match self
             .command_client
-            .lock()
-            .await
+            .clone()
             .restore_all_order(request)
             .await
         {
@@ -816,8 +814,7 @@ impl OrderGrpcClientTrait for OrderGrpcClientService {
 
         let response = match self
             .command_client
-            .lock()
-            .await
+            .clone()
             .delete_all_order(request)
             .await
         {

@@ -3,3 +3,5 @@
 grafana
 hurl
 logs
+k8s
+k6

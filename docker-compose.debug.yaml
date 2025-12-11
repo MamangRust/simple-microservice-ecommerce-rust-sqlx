@@ -1,8 +1,6 @@
 services:
   apigateway:
-    build:
-      context: .
-      dockerfile: Dockerfile.apigateway
+    image: microservice-ecommerce/apigateway:latest
     container_name: simple_ecommerce_apigateway
     restart: unless-stopped
     env_file:
@@ -54,9 +52,7 @@ services:
       - "5433:5432"
 
   auth:
-    build:
-      context: .
-      dockerfile: Dockerfile.auth
+    image: microservice-ecommerce/auth:latest
     container_name: simple_ecommerce_auth_service
     restart: unless-stopped
     env_file:
@@ -103,9 +99,7 @@ services:
       - "5434:5432"
 
   user:
-    build:
-      context: .
-      dockerfile: Dockerfile.user
+    image: microservice-ecommerce/user:latest
     container_name: simple_ecommerce_user_service
     restart: unless-stopped
     env_file:
@@ -152,9 +146,7 @@ services:
       - "5435:5432"
 
   role:
-    build:
-      context: .
-      dockerfile: Dockerfile.role
+    image: microservice-ecommerce/role:latest
     container_name: simple_ecommerce_role_service
     restart: unless-stopped
     env_file:
@@ -199,9 +191,7 @@ services:
       - "5436:5432"
 
   product:
-    build:
-      context: .
-      dockerfile: Dockerfile.product
+    image: microservice-ecommerce/product:latest
     container_name: simple_ecommerce_product_service
     restart: unless-stopped
     env_file:
@@ -246,9 +236,7 @@ services:
       - "5437:5432"
 
   order:
-    build:
-      context: .
-      dockerfile: Dockerfile.order
+    image: microservice-ecommerce/order:latest
     container_name: simple_ecommerce_order_service
     restart: unless-stopped
     env_file:
@@ -275,9 +263,7 @@ services:
       - app_example_ecommerce
 
   email:
-    build:
-      context: .
-      dockerfile: Dockerfile.email
+    image: microservice-ecommerce/email:latest
     container_name: simple_ecommerce_email_service
     restart: unless-stopped
     env_file:

@@ -10,7 +10,7 @@ pub struct Session {
     pub email: String,
     pub roles: Vec<String>,
 }
-
+    
 #[derive(Clone)]
 pub struct SessionStore {
     pub redis: Arc<redis::Client>,

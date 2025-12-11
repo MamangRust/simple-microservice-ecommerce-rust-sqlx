@@ -1,5 +1,5 @@
 use crate::{
-    abstract_trait::user::DynUserGrpcClient,
+    abstract_trait::{session::DynSessionMiddleware, user::DynUserGrpcClient},
     domain::{
         requests::user::{FindAllUsers, UpdateUserRequest},
         response::{
@@ -42,8 +42,26 @@ use utoipa_axum::router::OpenApiRouter;
 )]
 pub async fn get_users(
     Extension(service): Extension<DynUserGrpcClient>,
+    Extension(user_id): Extension<i32>,
+    Extension(session): Extension<DynSessionMiddleware>,
     Query(params): Query<FindAllUsers>,
 ) -> Result<impl IntoResponse, HttpError> {
+    let key = format!("session:{user_id}");
+
+    let current_session = session
+        .get_session(&key)
+        .ok_or_else(|| HttpError::Unauthorized("Session expired or not found".to_string()))?;
+
+    if !current_session
+        .roles
+        .iter()
+        .any(|r| r == "ROLE_ADMIN" || r == "ROLE_MODERATOR")
+    {
+        return Err(HttpError::Forbidden(
+            "Access denied. Required role: ADMIN or MODERATOR".to_string(),
+        ));
+    }
+
     let response = service.find_all(&params).await?;
     Ok((StatusCode::OK, Json(response)))
 }
@@ -62,8 +80,26 @@ pub async fn get_users(
 )]
 pub async fn get_active_users(
     Extension(service): Extension<DynUserGrpcClient>,
+    Extension(user_id): Extension<i32>,
+    Extension(session): Extension<DynSessionMiddleware>,
     Query(params): Query<FindAllUsers>,
 ) -> Result<impl IntoResponse, HttpError> {
+    let key = format!("session:{user_id}");
+
+    let current_session = session
+        .get_session(&key)
+        .ok_or_else(|| HttpError::Unauthorized("Session expired or not found".to_string()))?;
+
+    if !current_session
+        .roles
+        .iter()
+        .any(|r| r == "ROLE_ADMIN" || r == "ROLE_MODERATOR")
+    {
+        return Err(HttpError::Forbidden(
+            "Access denied. Required role: ADMIN or MODERATOR".to_string(),
+        ));
+    }
+
     let response = service.find_active(&params).await?;
     Ok((StatusCode::OK, Json(response)))
 }
@@ -82,8 +118,26 @@ pub async fn get_active_users(
 )]
 pub async fn get_trashed_users(
     Extension(service): Extension<DynUserGrpcClient>,
+    Extension(user_id): Extension<i32>,
+    Extension(session): Extension<DynSessionMiddleware>,
     Query(params): Query<FindAllUsers>,
 ) -> Result<impl IntoResponse, HttpError> {
+    let key = format!("session:{user_id}");
+
+    let current_session = session
+        .get_session(&key)
+        .ok_or_else(|| HttpError::Unauthorized("Session expired or not found".to_string()))?;
+
+    if !current_session
+        .roles
+        .iter()
+        .any(|r| r == "ROLE_ADMIN" || r == "ROLE_MODERATOR")
+    {
+        return Err(HttpError::Forbidden(
+            "Access denied. Required role: ADMIN or MODERATOR".to_string(),
+        ));
+    }
+
     let response = service.find_trashed(&params).await?;
     Ok((StatusCode::OK, Json(response)))
 }
@@ -103,7 +157,7 @@ pub async fn get_trashed_users(
 pub async fn get_user(
     Extension(service): Extension<DynUserGrpcClient>,
     Path(id): Path<i32>,
-    Extension(_user_id): Extension<i64>,
+    Extension(_user_id): Extension<i32>,
 ) -> Result<impl IntoResponse, HttpError> {
     let response = service.find_by_id(id).await?;
     Ok((StatusCode::OK, Json(response)))

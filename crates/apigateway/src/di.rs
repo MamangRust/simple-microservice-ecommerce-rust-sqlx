@@ -1,7 +1,6 @@
-use anyhow::Result;
+use anyhow::{Result, Context};
 use prometheus_client::registry::Registry;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
 use crate::{
     abstract_trait::{
@@ -13,7 +12,7 @@ use crate::{
         RoleGrpcClientService, UserGrpcClientService,
     },
 };
-use shared::utils::Metrics;
+
 
 #[derive(Clone)]
 pub struct DependenciesInject {
@@ -37,54 +36,51 @@ impl std::fmt::Debug for DependenciesInject {
 }
 
 impl DependenciesInject {
-    pub async fn new(
+    pub fn new(
         clients: GrpcClients,
-        metrics: Arc<Mutex<Metrics>>,
-        registry: Arc<Mutex<Registry>>,
+        registry: &mut Registry,
     ) -> Result<Self> {
         let auth_clients: DynAuthGrpcClient = Arc::new(
-            AuthGrpcClientService::new(clients.auth, metrics.clone(), registry.clone()).await,
+            AuthGrpcClientService::new(clients.auth.clone(), registry)
+                .context("Failed to initialize AuthGrpcClientService")?
         );
 
         let role_clients: DynRoleGrpcClient = Arc::new(
             RoleGrpcClientService::new(
-                clients.role_query,
-                clients.role_command,
-                metrics.clone(),
-                registry.clone(),
+                clients.role_query.clone(),
+                clients.role_command.clone(),
+                registry,
             )
-            .await,
+                .context("Failed to initialize RoleGrpcClientService")?
         );
 
         let user_clients: DynUserGrpcClient = Arc::new(
             UserGrpcClientService::new(
-                clients.user_query,
-                clients.user_command,
-                metrics.clone(),
-                registry.clone(),
+                clients.user_query.clone(),
+                clients.user_command.clone(),
+                registry,
             )
-            .await,
+                .context("Failed to initialize UserGrpcClientService")?
         );
 
         let product_clients: DynProductGrpcClient = Arc::new(
             ProductGrpcClientService::new(
-                clients.product_query,
-                clients.product_command,
-                metrics.clone(),
-                registry.clone(),
+                clients.product_query.clone(),
+                clients.product_command.clone(),
+                registry,
             )
-            .await,
+                .context("Failed to initialize ProductGrpcClientService")?
         );
 
         let order_clients: DynOrderGrpcClient = Arc::new(
             OrderGrpcClientService::new(
-                clients.order_query,
-                clients.order_command,
-                metrics.clone(),
-                registry.clone(),
+                clients.order_query.clone(),
+                clients.order_command.clone(),
+                registry,
             )
-            .await,
+                .context("Failed to initialize OrderGrpcClientService")?
         );
+
 
         Ok(Self {
             auth_clients,
