@@ -1,12 +1,12 @@
 use crate::errors::{
     error::ErrorResponse, grpc::AppErrorGrpc, repository::RepositoryError, service::ServiceError,
 };
-use tracing::{info, error, warn};
 use axum::{
     Json,
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use tracing::{error, info, warn};
 
 #[derive(Debug)]
 pub enum HttpError {
@@ -31,9 +31,7 @@ impl From<AppErrorGrpc> for HttpError {
                     HttpError::BadRequest(format!("Validation failed: {errors:?}"))
                 }
 
-                ServiceError::Forbidden(msg) => {
-                    HttpError::Forbidden(msg)
-                }
+                ServiceError::Forbidden(msg) => HttpError::Forbidden(msg),
 
                 ServiceError::Repo(repo_err) => match repo_err {
                     RepositoryError::NotFound => HttpError::NotFound("Not found".into()),

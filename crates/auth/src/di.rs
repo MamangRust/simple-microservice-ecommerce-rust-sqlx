@@ -10,7 +10,7 @@ use crate::{
         token::TokenService,
     },
 };
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use prometheus_client::registry::Registry;
 use shared::{
     abstract_trait::{DynHashing, DynJwtService, DynKafka},
@@ -48,7 +48,11 @@ pub struct DependenciesInjectDeps {
 }
 
 impl DependenciesInject {
-    pub async fn new(deps: DependenciesInjectDeps, clients: GrpcClients, registry: &mut Registry) -> Result<Self> {
+    pub async fn new(
+        deps: DependenciesInjectDeps,
+        clients: GrpcClients,
+        registry: &mut Registry,
+    ) -> Result<Self> {
         let DependenciesInjectDeps {
             hash,
             pool,
@@ -62,12 +66,10 @@ impl DependenciesInject {
         let refresh_token = RefreshTokenRepository::new(pool.clone());
         let reset_token = ResetTokenRepository::new(pool.clone());
 
-        let user_client: DynUserGrpcClient = Arc::new(
-            UserGrpcClientService::new(
-                clients.user_query_client.clone(),
-                clients.user_command_client.clone(),
-            ),
-        );
+        let user_client: DynUserGrpcClient = Arc::new(UserGrpcClientService::new(
+            clients.user_query_client.clone(),
+            clients.user_command_client.clone(),
+        ));
 
         let register_deps = RegisterServiceDeps {
             user_client: user_client.clone(),
@@ -75,7 +77,8 @@ impl DependenciesInject {
             cache_store: cache.clone(),
         };
 
-        let register_service = RegisterService::new(register_deps, registry).context("failed initialize register")?;
+        let register_service =
+            RegisterService::new(register_deps, registry).context("failed initialize register")?;
 
         let token_service = Arc::new(TokenService::new(
             jwt_config.clone(),
@@ -89,7 +92,8 @@ impl DependenciesInject {
             cache_store: cache.clone(),
         };
 
-        let login_service = LoginService::new(login_deps, registry).context("failed initialize login")?;
+        let login_service =
+            LoginService::new(login_deps, registry).context("failed initialize login")?;
 
         let identity_deps = IdentityServiceDeps {
             refresh_token_command: refresh_token.command.clone(),
@@ -99,7 +103,8 @@ impl DependenciesInject {
             cache_store: cache.clone(),
         };
 
-        let identity_service = IdentityService::new(identity_deps, registry).context("failed initialize identity")?;
+        let identity_service =
+            IdentityService::new(identity_deps, registry).context("failed initialize identity")?;
 
         let password_deps = PasswordResetServiceDeps {
             reset_token_query: reset_token.query,
@@ -109,7 +114,8 @@ impl DependenciesInject {
             cache_store: cache.clone(),
         };
 
-        let password_reset_service = PasswordResetService::new(password_deps, registry).context("failed iniliazlie password reset")?;
+        let password_reset_service = PasswordResetService::new(password_deps, registry)
+            .context("failed iniliazlie password reset")?;
 
         Ok(Self {
             login_service,

@@ -9,6 +9,7 @@ use crate::{
         response::{api::ApiResponse, token::TokenResponse, user::UserResponse},
     },
 };
+use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Duration;
 use opentelemetry::{
@@ -23,7 +24,6 @@ use shared::{
     errors::{ServiceError, grpc_status_to_service_error},
     utils::{MetadataInjector, Method, Metrics, Status as StatusUtils, TracingContext},
 };
-use anyhow::Result;
 use std::sync::Arc;
 use tokio::time::Instant;
 use tonic::Request;

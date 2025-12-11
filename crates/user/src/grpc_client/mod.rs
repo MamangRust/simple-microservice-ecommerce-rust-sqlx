@@ -21,12 +21,8 @@ impl GrpcClients {
         let role_channel = Self::connect(config.role, "role-service").await?;
 
         Ok(Self {
-            role_client: RoleQueryServiceClient::new(
-                role_channel.clone(),
-            ),
-            user_role_client: UserRoleServiceClient::new(
-                role_channel.clone(),
-            ),
+            role_client: RoleQueryServiceClient::new(role_channel.clone()),
+            user_role_client: UserRoleServiceClient::new(role_channel.clone()),
         })
     }
 

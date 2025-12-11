@@ -10,6 +10,7 @@ use crate::{
         },
     },
 };
+use anyhow::Result;
 use async_trait::async_trait;
 use genproto::user::{
     FindAllUserRequest, FindByIdUserRequest, UpdateUserRequest,
@@ -29,7 +30,6 @@ use shared::{
 use tokio::time::Instant;
 use tonic::{Request, transport::Channel};
 use tracing::{error, info};
-use anyhow::Result;
 
 #[derive(Debug, Clone)]
 pub struct UserGrpcClientService {

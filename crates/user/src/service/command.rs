@@ -20,6 +20,7 @@ use crate::{
         },
     },
 };
+use anyhow::Result;
 use async_trait::async_trait;
 use opentelemetry::{
     Context, KeyValue,
@@ -32,7 +33,6 @@ use shared::{
     errors::ServiceError,
     utils::{MetadataInjector, Method, Metrics, Status as StatusUtils, TracingContext},
 };
-use anyhow::Result;
 use tokio::time::Instant;
 use tonic::Request;
 use tracing::{error, info};

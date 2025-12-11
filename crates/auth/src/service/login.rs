@@ -8,6 +8,7 @@ use crate::{
         response::{api::ApiResponse, token::TokenResponse},
     },
 };
+use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Duration;
 use opentelemetry::{
@@ -15,7 +16,6 @@ use opentelemetry::{
     global::{self, BoxedTracer},
     trace::{Span, SpanKind, TraceContextExt, Tracer},
 };
-use anyhow::Result;
 use prometheus_client::registry::Registry;
 use shared::{abstract_trait::DynHashing, errors::AppErrorGrpc};
 use shared::{

@@ -10,19 +10,19 @@ use crate::{
         },
     },
 };
-use shared::{
-    errors::ServiceError,
-    utils::{MetadataInjector, Method, Metrics, Status as StatusUtils, TracingContext},
-};
 use anyhow::Result;
 use async_trait::async_trait;
 use genproto::order::FindByIdOrderRequest;
 use opentelemetry::{
-Context, KeyValue,
+    Context, KeyValue,
     global::{self, BoxedTracer},
     trace::{Span, SpanKind, TraceContextExt, Tracer},
 };
 use prometheus_client::registry::Registry;
+use shared::{
+    errors::ServiceError,
+    utils::{MetadataInjector, Method, Metrics, Status as StatusUtils, TracingContext},
+};
 use tokio::time::Instant;
 use tonic::Request;
 use tracing::{error, info};
@@ -34,10 +34,7 @@ pub struct RoleCommandService {
 }
 
 impl RoleCommandService {
-    pub fn new(
-        command: DynRoleCommandRepository,
-        registry: &mut Registry,
-    ) -> Result<Self> {
+    pub fn new(command: DynRoleCommandRepository, registry: &mut Registry) -> Result<Self> {
         let metrics = Metrics::new();
 
         registry.register(

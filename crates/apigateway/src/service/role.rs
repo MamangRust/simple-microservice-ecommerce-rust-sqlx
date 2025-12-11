@@ -11,13 +11,13 @@ use crate::{
         },
     },
 };
+use anyhow::Result;
 use async_trait::async_trait;
 use genproto::role::{
     CreateRoleRequest, FindAllRoleRequest, FindByIdRoleRequest, FindByIdUserRoleRequest,
     UpdateRoleRequest, role_command_service_client::RoleCommandServiceClient,
     role_query_service_client::RoleQueryServiceClient,
 };
-use anyhow::Result;
 use opentelemetry::{
     Context, KeyValue,
     global::{self, BoxedTracer},

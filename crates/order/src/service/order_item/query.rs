@@ -11,6 +11,7 @@ use crate::{
         },
     },
 };
+use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Duration;
 use opentelemetry::{
@@ -24,7 +25,6 @@ use shared::{
     errors::ServiceError,
     utils::{MetadataInjector, Method, Metrics, Status as StatusUtils, TracingContext},
 };
-use anyhow::Result;
 use std::sync::Arc;
 use tokio::time::Instant;
 use tonic::Request;

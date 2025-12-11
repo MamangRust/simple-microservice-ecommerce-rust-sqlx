@@ -28,6 +28,7 @@ use shared::{
     utils::{MetadataInjector, Method, Metrics, Status as StatusUtils, TracingContext},
 };
 
+use anyhow::Result;
 use async_trait::async_trait;
 use opentelemetry::{
     Context, KeyValue,
@@ -37,7 +38,6 @@ use opentelemetry::{
 use prometheus_client::registry::Registry;
 use tokio::time::Instant;
 use tonic::Request;
-use anyhow::Result;
 use tracing::{error, info};
 
 #[derive(Clone)]

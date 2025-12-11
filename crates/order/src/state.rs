@@ -38,8 +38,7 @@ impl AppState {
 
         let config = RedisConfig::new("redis".into(), 6379, 1, Some("dragon_knight".into()));
 
-        let redis = RedisClient::new(&config)
-            .context("Failed to connect to Redis")?;
+        let redis = RedisClient::new(&config).context("Failed to connect to Redis")?;
 
         redis.ping().context("Failed to ping Redis server")?;
 

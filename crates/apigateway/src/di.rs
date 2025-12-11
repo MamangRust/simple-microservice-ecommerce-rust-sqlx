@@ -1,4 +1,4 @@
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use prometheus_client::registry::Registry;
 use std::sync::Arc;
 
@@ -12,7 +12,6 @@ use crate::{
         RoleGrpcClientService, UserGrpcClientService,
     },
 };
-
 
 #[derive(Clone)]
 pub struct DependenciesInject {
@@ -36,13 +35,10 @@ impl std::fmt::Debug for DependenciesInject {
 }
 
 impl DependenciesInject {
-    pub fn new(
-        clients: GrpcClients,
-        registry: &mut Registry,
-    ) -> Result<Self> {
+    pub fn new(clients: GrpcClients, registry: &mut Registry) -> Result<Self> {
         let auth_clients: DynAuthGrpcClient = Arc::new(
             AuthGrpcClientService::new(clients.auth.clone(), registry)
-                .context("Failed to initialize AuthGrpcClientService")?
+                .context("Failed to initialize AuthGrpcClientService")?,
         );
 
         let role_clients: DynRoleGrpcClient = Arc::new(
@@ -51,7 +47,7 @@ impl DependenciesInject {
                 clients.role_command.clone(),
                 registry,
             )
-                .context("Failed to initialize RoleGrpcClientService")?
+            .context("Failed to initialize RoleGrpcClientService")?,
         );
 
         let user_clients: DynUserGrpcClient = Arc::new(
@@ -60,7 +56,7 @@ impl DependenciesInject {
                 clients.user_command.clone(),
                 registry,
             )
-                .context("Failed to initialize UserGrpcClientService")?
+            .context("Failed to initialize UserGrpcClientService")?,
         );
 
         let product_clients: DynProductGrpcClient = Arc::new(
@@ -69,7 +65,7 @@ impl DependenciesInject {
                 clients.product_command.clone(),
                 registry,
             )
-                .context("Failed to initialize ProductGrpcClientService")?
+            .context("Failed to initialize ProductGrpcClientService")?,
         );
 
         let order_clients: DynOrderGrpcClient = Arc::new(
@@ -78,9 +74,8 @@ impl DependenciesInject {
                 clients.order_command.clone(),
                 registry,
             )
-                .context("Failed to initialize OrderGrpcClientService")?
+            .context("Failed to initialize OrderGrpcClientService")?,
         );
-
 
         Ok(Self {
             auth_clients,

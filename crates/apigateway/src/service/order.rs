@@ -11,6 +11,7 @@ use crate::{
         },
     },
 };
+use anyhow::Result;
 use async_trait::async_trait;
 use genproto::order::{
     CreateOrderItemRequest, CreateOrderRequest, FindAllOrderRequest, FindByIdOrderRequest,
@@ -28,7 +29,6 @@ use shared::{
     errors::{AppErrorGrpc, HttpError},
     utils::{MetadataInjector, Method, Metrics, Status as StatusUtils, TracingContext},
 };
-use anyhow::Result;
 use tokio::time::Instant;
 use tonic::{Request, transport::Channel};
 use tracing::{error, info};
@@ -318,12 +318,7 @@ impl OrderGrpcClientTrait for OrderGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self
-            .query_client
-            .clone()
-            .find_by_trashed(request)
-            .await
-        {
+        let response = match self.query_client.clone().find_by_trashed(request).await {
             Ok(resp) => {
                 self.complete_tracing_success(
                     &tracing_ctx,
@@ -761,12 +756,7 @@ impl OrderGrpcClientTrait for OrderGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self
-            .command_client
-            .clone()
-            .restore_all_order(request)
-            .await
-        {
+        let response = match self.command_client.clone().restore_all_order(request).await {
             Ok(resp) => {
                 self.complete_tracing_success(&tracing_ctx, method, "Orders restored")
                     .await;
@@ -812,12 +802,7 @@ impl OrderGrpcClientTrait for OrderGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self
-            .command_client
-            .clone()
-            .delete_all_order(request)
-            .await
-        {
+        let response = match self.command_client.clone().delete_all_order(request).await {
             Ok(resp) => {
                 self.complete_tracing_success(&tracing_ctx, method, "Orders permanently deleted")
                     .await;

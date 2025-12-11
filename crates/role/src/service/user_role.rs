@@ -7,6 +7,7 @@ use crate::{
         response::{api::ApiResponse, user_role::UserRoleResponse},
     },
 };
+use anyhow::Result;
 use async_trait::async_trait;
 use opentelemetry::{
     Context, KeyValue,
@@ -18,8 +19,7 @@ use shared::{
     errors::ServiceError,
     utils::{MetadataInjector, Method, Metrics, Status as StatusUtils, TracingContext},
 };
-use anyhow::Result;
-use tokio::{ time::Instant};
+use tokio::time::Instant;
 use tonic::Request;
 use tracing::{error, info};
 
@@ -30,10 +30,7 @@ pub struct UserRoleCommandService {
 }
 
 impl UserRoleCommandService {
-    pub fn new(
-        command: DynUserRoleCommandRepository,
-        registry: &mut Registry,
-    ) -> Result<Self> {
+    pub fn new(command: DynUserRoleCommandRepository, registry: &mut Registry) -> Result<Self> {
         let metrics = Metrics::new();
 
         registry.register(

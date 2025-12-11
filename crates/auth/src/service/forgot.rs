@@ -14,6 +14,7 @@ use crate::{
     },
 };
 
+use anyhow::Result;
 use async_trait::async_trait;
 use chrono::{Duration, Utc};
 use opentelemetry::{
@@ -31,7 +32,6 @@ use shared::{
         TracingContext, generate_random_string,
     },
 };
-use anyhow::Result;
 use std::sync::Arc;
 use tokio::time::Instant;
 use tonic::{Request, Status};

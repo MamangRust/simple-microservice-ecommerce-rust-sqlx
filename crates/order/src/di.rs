@@ -10,7 +10,7 @@ use crate::{
         order_item::OrderItemQueryService,
     },
 };
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use prometheus_client::registry::Registry;
 use shared::{
     abstract_trait::DynKafka,
@@ -44,12 +44,12 @@ pub struct DependenciesInjectDeps {
 }
 
 impl DependenciesInject {
-    pub async fn new(deps: DependenciesInjectDeps, clients: GrpcClients, registry: &mut Registry) -> Result<Self> {
-        let DependenciesInjectDeps {
-            kafka,
-            pool,
-            redis,
-        } = deps;
+    pub async fn new(
+        deps: DependenciesInjectDeps,
+        clients: GrpcClients,
+        registry: &mut Registry,
+    ) -> Result<Self> {
+        let DependenciesInjectDeps { kafka, pool, redis } = deps;
 
         let order_query_repo = Arc::new(OrderQueryRepository::new(pool.clone()));
         let order_command_repo = Arc::new(OrderCommandRepository::new(pool.clone()));
@@ -61,11 +61,8 @@ impl DependenciesInject {
 
         let cache = Arc::new(CacheStore::new(redis.client.clone()));
 
-        let order_query = OrderQueryService::new(
-            order_query_repo.clone(),
-            registry,
-            cache.clone(),
-        ).context("failed initialize order query")?;
+        let order_query = OrderQueryService::new(order_query_repo.clone(), registry, cache.clone())
+            .context("failed initialize order query")?;
 
         let order_command_deps = OrderCommandServiceDeps {
             product_client,
@@ -76,13 +73,12 @@ impl DependenciesInject {
             kafka,
         };
 
-        let order_command = OrderCommandService::new(order_command_deps, registry).context("failed initialize order command")?;
+        let order_command = OrderCommandService::new(order_command_deps, registry)
+            .context("failed initialize order command")?;
 
-        let order_item_query = OrderItemQueryService::new(
-            order_item_query_repo.clone(),
-            registry,
-            cache.clone(),
-        ).context("failed initialize order item query")?;
+        let order_item_query =
+            OrderItemQueryService::new(order_item_query_repo.clone(), registry, cache.clone())
+                .context("failed initialize order item query")?;
 
         Ok(Self {
             order_query,

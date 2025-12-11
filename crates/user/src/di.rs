@@ -7,7 +7,7 @@ use crate::{
         query::UserQueryService,
     },
 };
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use prometheus_client::registry::Registry;
 use shared::{
     abstract_trait::DynHashing,
@@ -39,12 +39,12 @@ impl fmt::Debug for DependenciesInject {
 }
 
 impl DependenciesInject {
-    pub fn new(deps: DependenciesInjectDeps, clients: GrpcClients, registry: &mut Registry) -> Result<Self> {
-        let DependenciesInjectDeps {
-            hash,
-            pool,
-            redis,
-        } = deps;
+    pub fn new(
+        deps: DependenciesInjectDeps,
+        clients: GrpcClients,
+        registry: &mut Registry,
+    ) -> Result<Self> {
+        let DependenciesInjectDeps { hash, pool, redis } = deps;
 
         let user_query_repo = Arc::new(UserQueryRepository::new(pool.clone()));
         let user_command_repo = Arc::new(UserCommandRepository::new(pool.clone()));
@@ -56,11 +56,8 @@ impl DependenciesInject {
 
         let cache = Arc::new(CacheStore::new(redis.client.clone()));
 
-        let user_query = UserQueryService::new(
-            user_query_repo.clone(),
-            registry,
-            cache.clone(),
-        ).context("failed intialize user query")?;
+        let user_query = UserQueryService::new(user_query_repo.clone(), registry, cache.clone())
+            .context("failed intialize user query")?;
 
         let user_command_deps = UserCommandServiceDeps {
             hash,
@@ -70,7 +67,8 @@ impl DependenciesInject {
             command: user_command_repo,
         };
 
-        let user_command = UserCommandService::new(user_command_deps, registry).context("failed initialize user command")?;
+        let user_command = UserCommandService::new(user_command_deps, registry)
+            .context("failed initialize user command")?;
 
         Ok(Self {
             user_query,

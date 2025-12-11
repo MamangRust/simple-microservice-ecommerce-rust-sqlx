@@ -1,4 +1,3 @@
-use std::time::Duration;
 use crate::config::grpc_config::GrpcClientConfig;
 use anyhow::{Context, Result};
 use genproto::{
@@ -9,6 +8,7 @@ use genproto::{
     },
     user_role::user_role_service_client::UserRoleServiceClient,
 };
+use std::time::Duration;
 use tonic::transport::{Channel, Endpoint};
 
 pub mod role;

@@ -8,7 +8,7 @@ use crate::{
         user_role::UserRoleCommandService,
     },
 };
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use prometheus_client::registry::Registry;
 use shared::{
     cache::CacheStore,
@@ -41,10 +41,7 @@ pub struct DependenciesInjectDeps {
 
 impl DependenciesInject {
     pub fn new(deps: DependenciesInjectDeps, registry: &mut Registry) -> Result<Self> {
-        let DependenciesInjectDeps {
-            pool,
-            redis,
-        } = deps;
+        let DependenciesInjectDeps { pool, redis } = deps;
 
         let role_query_repo = Arc::new(RoleQueryRepository::new(pool.clone()));
         let role_command_repo = Arc::new(RoleCommandRepository::new(pool.clone()));
@@ -52,17 +49,14 @@ impl DependenciesInject {
 
         let cache = Arc::new(CacheStore::new(redis.client.clone()));
 
-        let role_query = RoleQueryService::new(
-            role_query_repo,
-            registry,
-            cache.clone(),
-        ).context("failed initialize role query")?;
+        let role_query = RoleQueryService::new(role_query_repo, registry, cache.clone())
+            .context("failed initialize role query")?;
 
-        let role_command =
-            RoleCommandService::new(role_command_repo.clone(),  registry).context("failed initialize role command")?;
+        let role_command = RoleCommandService::new(role_command_repo.clone(), registry)
+            .context("failed initialize role command")?;
 
-        let user_role_command =
-            UserRoleCommandService::new(user_role_repo.clone(), registry).context("failed to initialize use role")?;
+        let user_role_command = UserRoleCommandService::new(user_role_repo.clone(), registry)
+            .context("failed to initialize use role")?;
 
         Ok(Self {
             role_query,

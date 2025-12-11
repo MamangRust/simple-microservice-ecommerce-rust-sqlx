@@ -8,6 +8,7 @@ use crate::{
         },
     },
 };
+use anyhow::Result;
 use async_trait::async_trait;
 use genproto::order_item::{
     FindAllOrderItemRequest, FindByIdOrderItemRequest,
@@ -26,7 +27,6 @@ use shared::{
 use tokio::time::Instant;
 use tonic::{Request, transport::Channel};
 use tracing::{error, info};
-use anyhow::Result;
 
 #[derive(Debug, Clone)]
 pub struct OrderItemGrpcClientService {
@@ -359,12 +359,7 @@ impl OrderItemGrpcClientTrait for OrderItemGrpcClientService {
         let mut request = Request::new(grpc_req);
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
-        let response = match self
-            .client
-            .clone()
-            .find_order_item_by_order(request)
-            .await
-        {
+        let response = match self.client.clone().find_order_item_by_order(request).await {
             Ok(resp) => {
                 self.complete_tracing_success(
                     &tracing_ctx,

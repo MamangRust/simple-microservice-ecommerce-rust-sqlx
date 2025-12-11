@@ -22,7 +22,6 @@ fn default_page_size() -> i32 {
     10
 }
 
-
 #[derive(Debug, Serialize, Deserialize, Validate, ToSchema, Clone)]
 pub struct UpdateUserRequest {
     pub user_id: Option<i32>,

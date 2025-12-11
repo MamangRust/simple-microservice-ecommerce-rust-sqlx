@@ -12,6 +12,7 @@ use crate::{
         },
     },
 };
+use anyhow::Result;
 use async_trait::async_trait;
 use genproto::product::{
     CreateProductRequest, FindAllProductRequest, FindByIdProductRequest, UpdateProductRequest,
@@ -23,7 +24,6 @@ use opentelemetry::{
     global::{self, BoxedTracer},
     trace::{Span, SpanKind, TraceContextExt, Tracer},
 };
-use anyhow::Result;
 use prometheus_client::registry::Registry;
 use shared::{
     errors::{AppErrorGrpc, HttpError},

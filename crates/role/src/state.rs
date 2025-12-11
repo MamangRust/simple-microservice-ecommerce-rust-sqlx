@@ -30,8 +30,7 @@ impl AppState {
 
         let config = RedisConfig::new("redis".into(), 6379, 1, Some("dragon_knight".into()));
 
-        let redis = RedisClient::new(&config)
-            .context("Failed to connect to Redis")?;
+        let redis = RedisClient::new(&config).context("Failed to connect to Redis")?;
 
         redis.ping().context("Failed to ping Redis server")?;
 
@@ -40,9 +39,8 @@ impl AppState {
             redis: redis.clone(),
         };
 
-        let di_container =
-            DependenciesInject::new(deps, &mut registry)
-                .context("Failed to initialize dependency injection container")?;
+        let di_container = DependenciesInject::new(deps, &mut registry)
+            .context("Failed to initialize dependency injection container")?;
 
         registry.register_metrics(&system_metrics);
 

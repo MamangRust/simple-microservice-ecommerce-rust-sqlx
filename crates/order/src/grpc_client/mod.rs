@@ -1,9 +1,9 @@
 pub mod product;
 
-use std::time::Duration;
 use crate::config::grpc_config::GrpcClientConfig;
 use anyhow::{Context, Result};
 use genproto::product::product_query_service_client::ProductQueryServiceClient;
+use std::time::Duration;
 use tonic::transport::{Channel, Endpoint};
 
 #[derive(Clone)]
@@ -16,9 +16,7 @@ impl GrpcClients {
         let product_channel = Self::connect(config.product, "product-service").await?;
 
         Ok(Self {
-            product_query_client: ProductQueryServiceClient::new(
-                product_channel.clone(),
-            ),
+            product_query_client: ProductQueryServiceClient::new(product_channel.clone()),
         })
     }
 
