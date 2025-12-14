@@ -180,7 +180,8 @@ impl IdentityServiceTrait for IdentityService {
 
                 let _ = self
                     .cache_store
-                    .delete_from_cache(&format!("auth:refresh:{token}")).await;
+                    .delete_from_cache(&format!("auth:refresh:{token}"))
+                    .await;
 
                 self.complete_tracing_error(&tracing_ctx, method, "Token expired")
                     .await;

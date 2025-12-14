@@ -14,9 +14,6 @@ pub use self::user::UserGrpcClientService;
 
 use crate::config::GrpcClientConfig;
 use anyhow::{Context, Result};
-use std::time::Duration;
-use tonic::transport::{Channel, Endpoint};
-use tracing::info;
 use genproto::{
     auth::auth_service_client::AuthServiceClient,
     order::{
@@ -37,6 +34,9 @@ use genproto::{
         user_query_service_client::UserQueryServiceClient,
     },
 };
+use std::time::Duration;
+use tonic::transport::{Channel, Endpoint};
+use tracing::info;
 
 #[derive(Clone)]
 pub struct GrpcClients {

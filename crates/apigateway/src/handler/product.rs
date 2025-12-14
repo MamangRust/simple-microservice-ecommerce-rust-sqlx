@@ -11,8 +11,7 @@ use crate::{
 };
 use crate::{
     middleware::{
-        jwt::auth_middleware, session::session_middleware,
-        validate::SimpleValidatedJson,
+        jwt::auth_middleware, session::session_middleware, validate::SimpleValidatedJson,
     },
     state::AppState,
 };

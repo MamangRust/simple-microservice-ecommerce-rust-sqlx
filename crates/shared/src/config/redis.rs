@@ -59,7 +59,7 @@ impl RedisConfig {
     }
 }
 
-impl Default for RedisConfig{
+impl Default for RedisConfig {
     fn default() -> Self {
         RedisConfig::new()
     }
