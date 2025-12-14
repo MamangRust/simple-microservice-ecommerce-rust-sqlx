@@ -6,6 +6,6 @@ CREATE TABLE "reset_tokens" (
     "expiry_date" TIMESTAMP NOT NULL
 );
 
-CREATE INDEX idx_reset_token_token ON reset_tokens (token);
+CREATE INDEX IF NOT EXISTS idx_reset_tokens_token ON reset_tokens (token);
 
-CREATE INDEX idx_reset_token_user_id ON reset_tokens (user_id);
+CREATE INDEX IF NOT EXISTS idx_reset_tokens_expiry ON reset_tokens (expiry_date);

@@ -3,7 +3,6 @@ auth_enabled: false
 server:
   http_listen_port: 3100
   grpc_listen_port: 9096
-
   grpc_server_max_recv_msg_size: 104857600
   grpc_server_max_send_msg_size: 104857600
   http_server_read_timeout: 600s
@@ -31,13 +30,12 @@ ingester:
     final_sleep: 0s
   chunk_idle_period: 5m
   chunk_retain_period: 30s
-  max_transfer_retries: 0
   wal:
     enabled: true
     dir: /loki/wal
 
 limits_config:
-  enforce_metric_name: false
+  allow_structured_metadata: true
   reject_old_samples: true
   reject_old_samples_max_age: 168h
   ingestion_rate_mb: 16
@@ -58,19 +56,18 @@ query_range:
 schema_config:
   configs:
     - from: 2020-10-24
-      store: boltdb-shipper
+      store: tsdb
       object_store: filesystem
-      schema: v11
+      schema: v13
       index:
         prefix: index_
         period: 24h
 
 ruler:
-  alertmanager_url: http://alertmanager:9093
+  alertmanager_url: http://localhost:9093
 
 compactor:
   working_directory: /loki/compactor
-  shared_store: filesystem
 
 table_manager:
   retention_deletes_enabled: false

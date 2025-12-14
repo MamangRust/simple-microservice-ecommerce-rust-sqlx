@@ -1,9 +1,11 @@
-use prometheus_client::metrics::histogram::Histogram;
-use prometheus_client::metrics::{counter::Counter, family::Family, gauge::Gauge};
-use prometheus_client::registry::Registry;
-use prometheus_client_derive_encode::{EncodeLabelSet, EncodeLabelValue};
+use opentelemetry::metrics::Meter;
+use opentelemetry::{
+    KeyValue, global,
+    metrics::{Counter, Gauge, Histogram},
+};
+use std::fmt::{Display, Formatter};
 use std::{
-    fs,
+    fmt, fs,
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -26,76 +28,68 @@ fn get_thread_count(pid: usize) -> Option<i64> {
 
 #[derive(Debug, Clone)]
 pub struct SystemMetrics {
-    pub memory_alloc_bytes: Gauge,
-    pub memory_sys_bytes: Gauge,
-    pub available_memory: Counter,
-    pub thread_usage: Gauge,
-    pub total_cpu_usage: Counter,
-    pub process_start_time: Gauge,
-}
-
-impl Default for SystemMetrics {
-    fn default() -> Self {
-        Self::new()
-    }
+    memory_alloc_bytes: Gauge<i64>,
+    memory_sys_bytes: Gauge<i64>,
+    available_memory: Counter<u64>,
+    thread_usage: Gauge<i64>,
+    total_cpu_usage: Counter<f64>,
+    _process_start_time: Gauge<u64>,
 }
 
 impl SystemMetrics {
     pub fn new() -> Self {
+        let meter = global::meter("system_metrics");
+
         let start_time = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .as_secs_f64();
+            .as_secs();
 
-        let metrics = Self {
-            memory_alloc_bytes: Gauge::default(),
-            memory_sys_bytes: Gauge::default(),
-            available_memory: Counter::default(),
-            thread_usage: Gauge::default(),
-            total_cpu_usage: Counter::default(),
-            process_start_time: Gauge::default(),
-        };
+        let memory_alloc_bytes = meter
+            .i64_gauge("process.memory.alloc.bytes")
+            .with_description("Current memory allocation in bytes")
+            .with_unit("bytes")
+            .build();
 
-        metrics.process_start_time.set(start_time as i64);
-        metrics
-    }
+        let memory_sys_bytes = meter
+            .i64_gauge("process.memory.sys.bytes")
+            .with_description("Total system memory in bytes")
+            .with_unit("bytes")
+            .build();
 
-    pub fn register(&self, registry: &mut Registry) {
-        registry.register(
-            "process_memory_alloc_bytes",
-            "Current memory allocation in bytes",
-            self.memory_alloc_bytes.clone(),
-        );
+        let available_memory = meter
+            .u64_counter("process.memory.available.total")
+            .with_description("Total available memory")
+            .with_unit("bytes")
+            .build();
 
-        registry.register(
-            "process_memory_sys_bytes",
-            "Total system memory in bytes",
-            self.memory_sys_bytes.clone(),
-        );
+        let thread_usage = meter
+            .i64_gauge("process.threads.total")
+            .with_description("Thread total")
+            .build();
 
-        registry.register(
-            "process_memory_frees_total",
-            "Total Available Memory",
-            self.available_memory.clone(),
-        );
+        let total_cpu_usage = meter
+            .f64_counter("system.cpu.usage.total")
+            .with_description("Total CPU usage")
+            .with_unit("percent")
+            .build();
 
-        registry.register(
-            "process_thread_total",
-            "Thread total",
-            self.thread_usage.clone(),
-        );
+        let process_start_time = meter
+            .u64_gauge("process.start_time.seconds")
+            .with_description("Start time of the process since unix epoch in seconds")
+            .with_unit("s")
+            .build();
 
-        registry.register(
-            "total_cpu_usage",
-            "Total cpu usage",
-            self.total_cpu_usage.clone(),
-        );
+        process_start_time.record(start_time, &[]);
 
-        registry.register(
-            "process_start_time_seconds",
-            "Start time of the process since unix epoch in seconds",
-            self.process_start_time.clone(),
-        );
+        Self {
+            memory_alloc_bytes,
+            memory_sys_bytes,
+            available_memory,
+            thread_usage,
+            total_cpu_usage,
+            _process_start_time: process_start_time,
+        }
     }
 
     pub async fn update_metrics(&self) {
@@ -106,23 +100,24 @@ impl SystemMetrics {
 
         if let Some(process) = sys.process(sysinfo::Pid::from(pid)) {
             let current_memory = process.memory() as i64;
-            self.memory_alloc_bytes.set(current_memory);
-            self.memory_sys_bytes.set(process.virtual_memory() as i64);
+            self.memory_alloc_bytes.record(current_memory, &[]);
+            self.memory_sys_bytes
+                .record(process.virtual_memory() as i64, &[]);
 
             let available_memory = sys.available_memory() / 1_024;
-            self.available_memory.inc_by(available_memory);
+            self.available_memory.add(available_memory, &[]);
 
-            let total_cpu_usage = sys.global_cpu_usage();
-            self.total_cpu_usage.inc_by(total_cpu_usage as u64);
+            let total_cpu_usage = sys.global_cpu_usage() as f64;
+            self.total_cpu_usage.add(total_cpu_usage, &[]);
 
             if let Some(thread_count) = get_thread_count(pid) {
-                self.thread_usage.set(thread_count);
+                self.thread_usage.record(thread_count, &[]);
             }
         }
     }
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelValue)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum Method {
     Get,
     Post,
@@ -130,48 +125,79 @@ pub enum Method {
     Delete,
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelValue)]
+impl Display for Method {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Method::Get => "GET",
+            Method::Post => "POST",
+            Method::Put => "PUT",
+            Method::Delete => "DELETE",
+        };
+        write!(f, "{}", s)
+    }
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum Status {
     Success,
     Error,
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
-pub struct Labels {
-    pub method: Method,
-    pub status: Status,
+impl Display for Status {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Status::Success => "success",
+            Status::Error => "error",
+        };
+        write!(f, "{}", s)
+    }
 }
 
-#[derive(Clone, Debug)]
-pub struct Metrics {
-    pub request_counter: Family<Labels, Counter>,
-    pub request_duration: Family<Labels, Histogram>,
-}
-
-impl Default for Metrics {
+impl Default for SystemMetrics {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct Metrics {
+    request_counter: Counter<u64>,
+    request_duration: Histogram<f64>,
+}
+
 impl Metrics {
-    pub fn new() -> Self {
+    pub fn new(meter: Meter) -> Self {
+        let request_counter = meter
+            .u64_counter("requests_total")
+            .with_description("Total number of HTTP requests")
+            .build();
+
+        let request_duration = meter
+            .f64_histogram("request_duration_seconds")
+            .with_description("HTTP request duration in seconds")
+            .with_unit("s")
+            .build();
+
         Self {
-            request_counter: Family::default(),
-            request_duration: Family::new_with_constructor(|| {
-                Histogram::new(vec![
-                    0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
-                ])
-            }),
+            request_counter,
+            request_duration,
         }
     }
 
     pub fn record(&self, method: Method, status: Status, duration_secs: f64) {
-        let labels = Labels { method, status };
-        self.request_counter.get_or_create(&labels).inc();
-        self.request_duration
-            .get_or_create(&labels)
-            .observe(duration_secs);
+        let attributes = &[
+            KeyValue::new("http.method", method.to_string()),
+            KeyValue::new("http.status", status.to_string()),
+        ];
+
+        self.request_counter.add(1, attributes);
+        self.request_duration.record(duration_secs, attributes);
+    }
+}
+
+impl Default for Metrics {
+    fn default() -> Self {
+        Self::new(global::meter("http_status"))
     }
 }
 

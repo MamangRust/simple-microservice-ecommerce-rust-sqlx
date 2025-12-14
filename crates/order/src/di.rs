@@ -11,11 +11,10 @@ use crate::{
     },
 };
 use anyhow::{Context, Result};
-use prometheus_client::registry::Registry;
 use shared::{
     abstract_trait::DynKafka,
     cache::CacheStore,
-    config::{ConnectionPool, RedisClient},
+    config::{ConnectionPool, RedisPool},
 };
 use std::{fmt, sync::Arc};
 
@@ -40,15 +39,11 @@ impl fmt::Debug for DependenciesInject {
 pub struct DependenciesInjectDeps {
     pub pool: ConnectionPool,
     pub kafka: DynKafka,
-    pub redis: RedisClient,
+    pub redis: RedisPool,
 }
 
 impl DependenciesInject {
-    pub async fn new(
-        deps: DependenciesInjectDeps,
-        clients: GrpcClients,
-        registry: &mut Registry,
-    ) -> Result<Self> {
+    pub async fn new(deps: DependenciesInjectDeps, clients: GrpcClients) -> Result<Self> {
         let DependenciesInjectDeps { kafka, pool, redis } = deps;
 
         let order_query_repo = Arc::new(OrderQueryRepository::new(pool.clone()));
@@ -59,9 +54,9 @@ impl DependenciesInject {
         let product_client: DynProductGrpcClient =
             Arc::new(ProductGrpcClientService::new(clients.product_query_client).await);
 
-        let cache = Arc::new(CacheStore::new(redis.client.clone()));
+        let cache = Arc::new(CacheStore::new(redis.pool.clone()));
 
-        let order_query = OrderQueryService::new(order_query_repo.clone(), registry, cache.clone())
+        let order_query = OrderQueryService::new(order_query_repo.clone(), cache.clone())
             .context("failed initialize order query")?;
 
         let order_command_deps = OrderCommandServiceDeps {
@@ -73,11 +68,11 @@ impl DependenciesInject {
             kafka,
         };
 
-        let order_command = OrderCommandService::new(order_command_deps, registry)
+        let order_command = OrderCommandService::new(order_command_deps)
             .context("failed initialize order command")?;
 
         let order_item_query =
-            OrderItemQueryService::new(order_item_query_repo.clone(), registry, cache.clone())
+            OrderItemQueryService::new(order_item_query_repo.clone(), cache.clone())
                 .context("failed initialize order item query")?;
 
         Ok(Self {

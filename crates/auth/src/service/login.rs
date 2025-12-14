@@ -16,7 +16,6 @@ use opentelemetry::{
     global::{self, BoxedTracer},
     trace::{Span, SpanKind, TraceContextExt, Tracer},
 };
-use prometheus_client::registry::Registry;
 use shared::{abstract_trait::DynHashing, errors::AppErrorGrpc};
 use shared::{
     cache::CacheStore,
@@ -45,8 +44,8 @@ pub struct LoginService {
 }
 
 impl LoginService {
-    pub fn new(deps: LoginServiceDeps, registry: &mut Registry) -> Result<Self> {
-        let metrics = Metrics::new();
+    pub fn new(deps: LoginServiceDeps) -> Result<Self> {
+        let metrics = Metrics::new(global::meter("login-service"));
 
         let LoginServiceDeps {
             hash,
@@ -54,17 +53,6 @@ impl LoginService {
             user_client,
             cache_store,
         } = deps;
-
-        registry.register(
-            "login_service_request_counter",
-            "Total number of requests to the LoginService",
-            metrics.request_counter.clone(),
-        );
-        registry.register(
-            "login_service_request_duration",
-            "Histogram of request durations for the LoginService",
-            metrics.request_duration.clone(),
-        );
 
         Ok(Self {
             hash,
@@ -198,6 +186,7 @@ impl LoginServiceTrait for LoginService {
         let attempts = self
             .cache_store
             .get_from_cache::<i32>(&attempts_key)
+            .await
             .unwrap_or(0);
 
         if attempts >= 5 {
@@ -226,7 +215,8 @@ impl LoginServiceTrait for LoginService {
             let new_attempts = attempts + 1;
 
             self.cache_store
-                .set_to_cache(&attempts_key, &new_attempts, Duration::minutes(15));
+                .set_to_cache(&attempts_key, &new_attempts, Duration::minutes(15))
+                .await;
 
             self.complete_tracing_error(&tracing_ctx, method.clone(), "Invalid password")
                 .await;
@@ -234,7 +224,7 @@ impl LoginServiceTrait for LoginService {
             return Err(ServiceError::InvalidCredentials);
         }
 
-        self.cache_store.delete_from_cache(&attempts_key);
+        self.cache_store.delete_from_cache(&attempts_key).await;
 
         let uid = user.id;
 

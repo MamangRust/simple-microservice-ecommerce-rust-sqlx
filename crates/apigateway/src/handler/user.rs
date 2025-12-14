@@ -50,6 +50,7 @@ pub async fn get_users(
 
     let current_session = session
         .get_session(&key)
+        .await
         .ok_or_else(|| HttpError::Unauthorized("Session expired or not found".to_string()))?;
 
     if !current_session
@@ -88,6 +89,7 @@ pub async fn get_active_users(
 
     let current_session = session
         .get_session(&key)
+        .await
         .ok_or_else(|| HttpError::Unauthorized("Session expired or not found".to_string()))?;
 
     if !current_session
@@ -126,6 +128,7 @@ pub async fn get_trashed_users(
 
     let current_session = session
         .get_session(&key)
+        .await
         .ok_or_else(|| HttpError::Unauthorized("Session expired or not found".to_string()))?;
 
     if !current_session

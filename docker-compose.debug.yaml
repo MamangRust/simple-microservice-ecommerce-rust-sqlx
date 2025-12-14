@@ -31,26 +31,6 @@ services:
     networks:
       - app_example_ecommerce
 
-  auth-db:
-    image: postgres:17-alpine
-    container_name: simple_ecommerce_auth_db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: auth_db
-    volumes:
-      - postgres_auth_data:/var/lib/postgresql/data
-    networks:
-      - app_example_ecommerce
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    ports:
-      - "5433:5432"
-
   auth:
     image: microservice-ecommerce/auth:latest
     container_name: simple_ecommerce_auth_service
@@ -63,7 +43,7 @@ services:
     depends_on:
       user:
         condition: service_started
-      auth-db:
+      pgbouncer:
         condition: service_healthy
       otel-collector:
         condition: service_started
@@ -77,26 +57,6 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
     networks:
       - app_example_ecommerce
-
-  user-db:
-    image: postgres:17-alpine
-    container_name: simple_ecommerce_user_db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: user_db
-    volumes:
-      - postgres_user_data:/var/lib/postgresql/data
-    networks:
-      - app_example_ecommerce
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    ports:
-      - "5434:5432"
 
   user:
     image: microservice-ecommerce/user:latest
@@ -110,7 +70,7 @@ services:
     depends_on:
       role:
         condition: service_started
-      user-db:
+      pgbouncer:
         condition: service_healthy
       otel-collector:
         condition: service_started
@@ -124,26 +84,6 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
     networks:
       - app_example_ecommerce
-
-  role-db:
-    image: postgres:17-alpine
-    container_name: simple_ecommerce_role_db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: role_db
-    volumes:
-      - postgres_role_data:/var/lib/postgresql/data
-    networks:
-      - app_example_ecommerce
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    ports:
-      - "5435:5432"
 
   role:
     image: microservice-ecommerce/role:latest
@@ -155,7 +95,7 @@ services:
       - 50053:50053
       - 8082:8082
     depends_on:
-      role-db:
+      pgbouncer:
         condition: service_healthy
       otel-collector:
         condition: service_started
@@ -169,26 +109,6 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
     networks:
       - app_example_ecommerce
-
-  product-db:
-    image: postgres:17-alpine
-    container_name: simple_ecommerce_product_db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: product_db
-    volumes:
-      - postgres_product_data:/var/lib/postgresql/data
-    networks:
-      - app_example_ecommerce
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    ports:
-      - "5436:5432"
 
   product:
     image: microservice-ecommerce/product:latest
@@ -200,7 +120,7 @@ services:
       - 50054:50054
       - 8083:8083
     depends_on:
-      product-db:
+      pgbouncer:
         condition: service_healthy
       otel-collector:
         condition: service_started
@@ -214,26 +134,6 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
     networks:
       - app_example_ecommerce
-
-  order-db:
-    image: postgres:17-alpine
-    container_name: simple_ecommerce_order_db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: order_db
-    volumes:
-      - postgres_order_data:/var/lib/postgresql/data
-    networks:
-      - app_example_ecommerce
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    ports:
-      - "5437:5432"
 
   order:
     image: microservice-ecommerce/order:latest
@@ -247,7 +147,7 @@ services:
     depends_on:
       product:
         condition: service_started
-      order-db:
+      pgbouncer:
         condition: service_healthy
       otel-collector:
         condition: service_started
@@ -281,6 +181,239 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
     networks:
       - app_example_ecommerce
+
+  redis_apigateway:
+    image: redis:7.4
+    container_name: redis_apigateway
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_apigateway_data:/data
+    networks:
+      - app_example_ecommerce
+    healthcheck:
+      test: [ "CMD-SHELL", "redis-cli ping || exit 1" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    command: redis-server --requirepass dragon_knight
+
+  redis_auth:
+    image: redis:7.4
+    container_name: redis_auth
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_auth_data:/data
+    networks:
+      - app_example_ecommerce
+    healthcheck:
+      test: [ "CMD-SHELL", "redis-cli ping || exit 1" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    command: redis-server --requirepass dragon_knight
+
+  redis_orders:
+    image: redis:7.4
+    container_name: redis_orders
+    ports:
+      - "6381:6379"
+    volumes:
+      - redis_orders_data:/data
+    networks:
+      - app_example_ecommerce
+    healthcheck:
+      test: [ "CMD-SHELL", "redis-cli ping || exit 1" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    command: redis-server --requirepass dragon_knight
+
+  redis_products:
+    image: redis:7.4
+    container_name: redis_products
+    ports:
+      - "6382:6379"
+    volumes:
+      - redis_products_data:/data
+    networks:
+      - app_example_ecommerce
+    healthcheck:
+      test: [ "CMD-SHELL", "redis-cli ping || exit 1" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    command: redis-server --requirepass dragon_knight
+
+  redis_role:
+    image: redis:7.4
+    container_name: redis_role
+    ports:
+      - "6383:6379"
+    volumes:
+      - redis_role_data:/data
+    networks:
+      - app_example_ecommerce
+    healthcheck:
+      test: [ "CMD-SHELL", "redis-cli ping || exit 1" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    command: redis-server --requirepass dragon_knight
+
+  redis_users:
+    image: redis:7.4
+    container_name: redis_users
+    ports:
+      - "6384:6379"
+    volumes:
+      - redis_users_data:/data
+    networks:
+      - app_example_ecommerce
+    healthcheck:
+      test: [ "CMD-SHELL", "redis-cli ping || exit 1" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    command: redis-server --requirepass dragon_knight
+
+
+  postgres_auth:
+    image: postgres:17-alpine
+    container_name: postgres_auth
+    environment:
+      POSTGRES_USER: auth_user
+      POSTGRES_PASSWORD: auth_password
+      POSTGRES_DB: auth_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_auth_data:/var/lib/postgresql/data
+    networks:
+      - app_example_ecommerce
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U auth_user -d auth_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres_orders:
+    image: postgres:17-alpine
+    container_name: postgres_orders
+    environment:
+      POSTGRES_USER: orders_user
+      POSTGRES_PASSWORD: orders_password
+      POSTGRES_DB: orders_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_order_data:/var/lib/postgresql/data
+    networks:
+      - app_example_ecommerce
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U orders_user -d orders_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres_products:
+    image: postgres:17-alpine
+    container_name: postgres_products
+    environment:
+      POSTGRES_USER: products_user
+      POSTGRES_PASSWORD: products_password
+      POSTGRES_DB: products_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_product_data:/var/lib/postgresql/data
+    networks:
+      - app_example_ecommerce
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U products_user -d products_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres_role:
+    image: postgres:17-alpine
+    container_name: postgres_role
+    environment:
+      POSTGRES_USER: role_user
+      POSTGRES_PASSWORD: role_password
+      POSTGRES_DB: role_db
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_role_data:/var/lib/postgresql/data
+    networks:
+      - app_example_ecommerce
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U role_user -d role_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres_users:
+    image: postgres:17-alpine
+    container_name: postgres_users
+    environment:
+      POSTGRES_USER: users_user
+      POSTGRES_PASSWORD: users_password
+      POSTGRES_DB: users_db
+    ports:
+      - "5436:5432"
+    volumes:
+      - postgres_user_data:/var/lib/postgresql/data
+    networks:
+      - app_example_ecommerce
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U users_user -d users_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: pgbouncer
+    ports:
+      - "6432:6432"
+      - "6433:6433"
+    volumes:
+      - ./pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+      - ./pgbouncer/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+      - ./pgbouncer/health-check.sh:/usr/local/bin/health-check.sh:ro
+      - ./pgbouncer/manage.sh:/usr/local/bin/manage.sh:ro
+      - pgbouncer_logs:/var/log/pgbouncer
+      - pgbouncer_data:/var/lib/pgbouncer
+    networks:
+      - app_example_ecommerce
+    depends_on:
+      postgres_auth:
+        condition: service_healthy
+      postgres_orders:
+        condition: service_healthy
+      postgres_products:
+        condition: service_healthy
+      postgres_role:
+        condition: service_healthy
+      postgres_users:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "/usr/local/bin/health-check.sh" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    environment:
+      - PGBOUNCER_ADMIN_USER=admin
+      - PGBOUNCER_ADMIN_PASS=admin_password
+      - PGBOUNCER_STATS_USER=stats
+      - PGBOUNCER_STATS_PASS=stats_password
+    command: [ "pgbouncer", "/etc/pgbouncer/pgbouncer.ini" ]
 
   kafka:
     image: apache/kafka:latest
@@ -319,18 +452,6 @@ services:
     volumes:
       - ./create_topic.sh:/tmp/create_topic.sh:ro
     command: ["/bin/sh", "/tmp/create_topic.sh"]
-    networks:
-      - app_example_ecommerce
-
-  redis:
-    image: redis:7.4
-    container_name: simple_ecommerce_redis
-    command: ["redis-server", "--requirepass", "dragon_knight"]
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_example_ecommerce-data:/data
-    restart: unless-stopped
     networks:
       - app_example_ecommerce
 
@@ -374,7 +495,7 @@ services:
       - app_example_ecommerce
 
   jaeger:
-    image: jaegertracing/all-in-one:latest
+    image: jaegertracing/all-in-one:1.74.0
     container_name: simple_ecommerce_jaeger
     ports:
       - "16686:16686"
@@ -414,7 +535,7 @@ services:
 
   loki:
     container_name: simple_ecommerce_loki
-    image: grafana/loki:2.9.0
+    image: grafana/loki:3.5.8
     ports:
       - "3100:3100"
     volumes:
@@ -446,6 +567,13 @@ volumes:
   postgres_product_data:
   postgres_order_data:
   postgres_email_data:
-  redis_example_ecommerce-data:
+  redis_apigateway_data:
+  redis_auth_data:
+  redis_orders_data:
+  redis_products_data:
+  redis_role_data:
+  redis_users_data:
   loki_example_ecommerce_data:
   kafka_data_ecommerce_data:
+  pgbouncer_logs:
+  pgbouncer_data:

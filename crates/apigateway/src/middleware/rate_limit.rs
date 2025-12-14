@@ -25,7 +25,9 @@ pub async fn rate_limit_middleware(
     let max_requests = 100;
     let window_seconds = 60;
 
-    let (allowed, current) = rate_limiter.check_rate_limit(&key, max_requests, window_seconds);
+    let (allowed, current) = rate_limiter
+        .check_rate_limit(&key, max_requests, window_seconds)
+        .await;
 
     if !allowed {
         warn!(

@@ -6,25 +6,14 @@ use tracing_appender::{
 };
 use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
-pub fn init_logger(sdk_logger_provider: SdkLoggerProvider, component: &str) {
-    let is_dev = std::env::var("DEV_MODE")
-        .map(|val| val == "true" || val == "1")
-        .unwrap_or(false);
-
-    let log_dir = if is_dev { "./logs" } else { "/var/log/app" };
-
-    let file_name = format!("rust_app_{component}.log");
-    let file_appender = RollingFileAppender::new(Rotation::DAILY, log_dir, file_name);
-    let (file_writer, guard) = non_blocking(file_appender);
-
-    let file_layer = fmt::layer()
-        .with_writer(file_writer)
-        .with_ansi(false)
-        .json()
-        .with_filter(EnvFilter::new("info"));
-
+pub fn init_logger(
+    sdk_logger_provider: SdkLoggerProvider,
+    component: &str,
+    is_dev: bool,
+    enable_file_logs: bool,
+) {
     let console_filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("off"));
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     let console_layer = fmt::layer()
         .pretty()
@@ -41,11 +30,24 @@ pub fn init_logger(sdk_logger_provider: SdkLoggerProvider, component: &str) {
 
     let otel_layer = OpenTelemetryTracingBridge::new(&sdk_logger_provider).with_filter(otel_filter);
 
-    tracing_subscriber::registry()
-        .with(file_layer)
+    let registry = tracing_subscriber::registry()
         .with(console_layer)
-        .with(otel_layer)
-        .init();
+        .with(otel_layer);
 
-    std::mem::forget(guard);
+    if enable_file_logs {
+        let log_dir = if is_dev { "./logs" } else { "/var/log/app" };
+        let file_name = format!("rust_app_{component}.log");
+        let file_appender = RollingFileAppender::new(Rotation::DAILY, log_dir, file_name);
+        let (file_writer, guard) = non_blocking(file_appender);
+        let file_layer = fmt::layer()
+            .with_writer(file_writer)
+            .with_ansi(false)
+            .json()
+            .with_filter(EnvFilter::new("warn"));
+
+        registry.with(file_layer).init();
+        std::mem::forget(guard);
+    } else {
+        registry.init();
+    }
 }

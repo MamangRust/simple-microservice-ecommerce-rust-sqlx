@@ -19,7 +19,6 @@ use opentelemetry::{
     global::{self, BoxedTracer},
     trace::{Span, SpanKind, TraceContextExt, Tracer},
 };
-use prometheus_client::registry::Registry;
 use shared::{
     cache::CacheStore,
     errors::ServiceError,
@@ -38,23 +37,8 @@ pub struct OrderItemQueryService {
 }
 
 impl OrderItemQueryService {
-    pub fn new(
-        query: DynOrderItemQueryRepository,
-        registry: &mut Registry,
-        cache_store: Arc<CacheStore>,
-    ) -> Result<Self> {
-        let metrics = Metrics::new();
-
-        registry.register(
-            "order_item_query_service_request_counter",
-            "Total number of requests to the OrderItemQueryService",
-            metrics.request_counter.clone(),
-        );
-        registry.register(
-            "order_item_query_service_request_duration",
-            "Histogram of request durations for the OrderItemQueryService",
-            metrics.request_duration.clone(),
-        );
+    pub fn new(query: DynOrderItemQueryRepository, cache_store: Arc<CacheStore>) -> Result<Self> {
+        let metrics = Metrics::new(global::meter("order-item-service"));
 
         Ok(Self {
             query,
@@ -192,6 +176,7 @@ impl OrderItemQueryServiceTrait for OrderItemQueryService {
         if let Some(cache) = self
             .cache_store
             .get_from_cache::<ApiResponsePagination<Vec<OrderItemResponse>>>(&cache_key)
+            .await
         {
             let log_message = format!("✅ Found cached order items (total: {})", cache.data.len());
             info!("{log_message}");
@@ -237,7 +222,8 @@ impl OrderItemQueryServiceTrait for OrderItemQueryService {
         };
 
         self.cache_store
-            .set_to_cache(&cache_key, &response, Duration::minutes(5));
+            .set_to_cache(&cache_key, &response, Duration::minutes(5))
+            .await;
         info!(
             "✅ Found {} order items (total: {total})",
             response.data.len()
@@ -283,6 +269,7 @@ impl OrderItemQueryServiceTrait for OrderItemQueryService {
         if let Some(cache) = self
             .cache_store
             .get_from_cache::<ApiResponsePagination<Vec<OrderItemResponseDeleteAt>>>(&cache_key)
+            .await
         {
             let log_message = format!(
                 "✅ Found cached active order items (total: {})",
@@ -331,7 +318,9 @@ impl OrderItemQueryServiceTrait for OrderItemQueryService {
         };
 
         self.cache_store
-            .set_to_cache(&cache_key, &response, Duration::minutes(5));
+            .set_to_cache(&cache_key, &response, Duration::minutes(5))
+            .await;
+
         info!(
             "✅ Found {} active order items (total: {total})",
             response.data.len()
@@ -378,6 +367,7 @@ impl OrderItemQueryServiceTrait for OrderItemQueryService {
         if let Some(cache) = self
             .cache_store
             .get_from_cache::<ApiResponsePagination<Vec<OrderItemResponseDeleteAt>>>(&cache_key)
+            .await
         {
             let log_message = format!(
                 "✅ Found cached trashed order items (total: {})",
@@ -426,7 +416,9 @@ impl OrderItemQueryServiceTrait for OrderItemQueryService {
         };
 
         self.cache_store
-            .set_to_cache(&cache_key, &response, Duration::minutes(5));
+            .set_to_cache(&cache_key, &response, Duration::minutes(5))
+            .await;
+
         info!(
             "✅ Found {} trashed order items (total: {total})",
             response.data.len()
@@ -446,6 +438,26 @@ impl OrderItemQueryServiceTrait for OrderItemQueryService {
             "find_order_item_by_order",
             vec![KeyValue::new("order_id", order_id.to_string())],
         );
+
+        let mut request = Request::new(order_id);
+        self.inject_trace_context(&tracing_ctx.cx, &mut request);
+
+        let cache_key = format!("order_item:find_order_item_by_order:order_id:{order_id}",);
+
+        if let Some(cache) = self
+            .cache_store
+            .get_from_cache::<ApiResponse<Vec<OrderItemResponse>>>(&cache_key)
+            .await
+        {
+            let log_message = format!(
+                "✅ Found cached trashed order items (total: {})",
+                cache.data.len()
+            );
+            info!("{log_message}");
+            self.complete_tracing_success(&tracing_ctx, method, &log_message)
+                .await;
+            return Ok(cache);
+        }
 
         let result = match self.query.find_order_item_by_order(order_id).await {
             Ok(items) => {
@@ -476,6 +488,10 @@ impl OrderItemQueryServiceTrait for OrderItemQueryService {
             message: "Order items retrieved successfully".to_string(),
             data: response_items,
         };
+
+        self.cache_store
+            .set_to_cache(&cache_key, &response, Duration::minutes(5))
+            .await;
 
         Ok(response)
     }

@@ -19,7 +19,6 @@ use opentelemetry::{
     global::{self, BoxedTracer},
     trace::{Span, SpanKind, TraceContextExt, Tracer},
 };
-use prometheus_client::registry::Registry;
 use shared::{
     cache::CacheStore,
     errors::ServiceError,
@@ -38,23 +37,8 @@ pub struct ProductQueryService {
 }
 
 impl ProductQueryService {
-    pub fn new(
-        query: DynProductQueryRepository,
-        registry: &mut Registry,
-        cache_store: Arc<CacheStore>,
-    ) -> Result<Self> {
-        let metrics = Metrics::new();
-
-        registry.register(
-            "product_query_service_request_counter",
-            "Total number of requests to the ProductQueryService",
-            metrics.request_counter.clone(),
-        );
-        registry.register(
-            "product_query_service_request_duration",
-            "Histogram of request durations for the ProductQueryService",
-            metrics.request_duration.clone(),
-        );
+    pub fn new(query: DynProductQueryRepository, cache_store: Arc<CacheStore>) -> Result<Self> {
+        let metrics = Metrics::new(global::meter("product-query-service"));
 
         Ok(Self {
             query,
@@ -195,6 +179,7 @@ impl ProductQueryServiceTrait for ProductQueryService {
         if let Some(cached) = self
             .cache_store
             .get_from_cache::<ApiResponsePagination<Vec<ProductResponse>>>(&cache_key)
+            .await
         {
             info!("✅ Found {} products in cache", cached.data.len());
             self.complete_tracing_success(&tracing_ctx, method, "Products retrieved from cache")
@@ -240,7 +225,8 @@ impl ProductQueryServiceTrait for ProductQueryService {
         };
 
         self.cache_store
-            .set_to_cache(&cache_key, &response, Duration::minutes(5));
+            .set_to_cache(&cache_key, &response, Duration::minutes(5))
+            .await;
 
         info!("✅ Found {} products (total: {total})", response.data.len());
 
@@ -288,6 +274,7 @@ impl ProductQueryServiceTrait for ProductQueryService {
         if let Some(cached) = self
             .cache_store
             .get_from_cache::<ApiResponsePagination<Vec<ProductResponseDeleteAt>>>(&cache_key)
+            .await
         {
             info!("✅ Found {} active products in cache", cached.data.len());
             self.complete_tracing_success(
@@ -340,7 +327,8 @@ impl ProductQueryServiceTrait for ProductQueryService {
         };
 
         self.cache_store
-            .set_to_cache(&cache_key, &response, Duration::minutes(5));
+            .set_to_cache(&cache_key, &response, Duration::minutes(5))
+            .await;
 
         info!(
             "✅ Found {} active products (total: {total})",
@@ -391,6 +379,7 @@ impl ProductQueryServiceTrait for ProductQueryService {
         if let Some(cached) = self
             .cache_store
             .get_from_cache::<ApiResponsePagination<Vec<ProductResponseDeleteAt>>>(&cache_key)
+            .await
         {
             info!("✅ Found {} trashed products in cache", cached.data.len());
             self.complete_tracing_success(
@@ -443,7 +432,8 @@ impl ProductQueryServiceTrait for ProductQueryService {
         };
 
         self.cache_store
-            .set_to_cache(&cache_key, &response, Duration::minutes(5));
+            .set_to_cache(&cache_key, &response, Duration::minutes(5))
+            .await;
 
         info!(
             "✅ Found {} trashed products (total: {total})",
@@ -474,6 +464,7 @@ impl ProductQueryServiceTrait for ProductQueryService {
         if let Some(cached) = self
             .cache_store
             .get_from_cache::<ApiResponse<ProductResponse>>(&cache_key)
+            .await
         {
             info!("✅ Found product ID {} in cache", id);
             self.complete_tracing_success(&tracing_ctx, method, "Product retrieved from cache")
@@ -515,7 +506,8 @@ impl ProductQueryServiceTrait for ProductQueryService {
         };
 
         self.cache_store
-            .set_to_cache(&cache_key, &response, Duration::minutes(5));
+            .set_to_cache(&cache_key, &response, Duration::minutes(5))
+            .await;
 
         info!("✅ Product retrieved: '{}' (ID: {id})", response.data.name);
 

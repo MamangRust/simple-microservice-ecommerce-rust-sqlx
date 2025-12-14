@@ -16,7 +16,7 @@ use crate::config::GrpcClientConfig;
 use anyhow::{Context, Result};
 use std::time::Duration;
 use tonic::transport::{Channel, Endpoint};
-
+use tracing::info;
 use genproto::{
     auth::auth_service_client::AuthServiceClient,
     order::{
@@ -63,11 +63,11 @@ pub struct GrpcClients {
 
 impl GrpcClients {
     pub async fn init(config: GrpcClientConfig) -> Result<Self> {
-        let auth_channel = Self::connect(config.auth, "auth-service").await?;
-        let user_channel = Self::connect(config.user, "user-service").await?;
-        let role_channel = Self::connect(config.role, "role-service").await?;
-        let product_channel = Self::connect(config.product, "product-service").await?;
-        let order_channel = Self::connect(config.order, "order-service").await?;
+        let auth_channel = Self::connect(&config.auth, "auth-service").await?;
+        let user_channel = Self::connect(&config.user, "user-service").await?;
+        let role_channel = Self::connect(&config.role, "role-service").await?;
+        let product_channel = Self::connect(&config.product, "product-service").await?;
+        let order_channel = Self::connect(&config.order, "order-service").await?;
 
         Ok(Self {
             auth: AuthServiceClient::new(auth_channel),
@@ -87,21 +87,34 @@ impl GrpcClients {
         })
     }
 
-    async fn connect(addr: String, service: &str) -> Result<Channel> {
-        let endpoint = Endpoint::from_shared(addr.clone())
-            .with_context(|| format!("Invalid gRPC address for {service}: {addr}"))?;
+    async fn connect(addr: &str, service: &str) -> Result<Channel> {
+        info!("Connecting (balanced) to {} at {}", service, addr);
 
-        let configured_endpoint = endpoint
-            .connect_timeout(Duration::from_secs(3))
-            .timeout(Duration::from_secs(10))
-            .http2_keep_alive_interval(Duration::from_secs(30))
-            .http2_keep_alive_interval(Duration::from_secs(5))
-            .initial_connection_window_size(1_048_576)
-            .initial_stream_window_size(1_048_576);
+        const POOL_SIZE: usize = 10;
 
-        configured_endpoint
-            .connect()
-            .await
-            .with_context(|| format!("Failed to connect to {service} at {addr}"))
+        let mut endpoints = Vec::with_capacity(POOL_SIZE);
+
+        for _ in 0..POOL_SIZE {
+            let ep = Endpoint::from_shared(addr.to_string())
+                .with_context(|| format!("Invalid gRPC address for {service}: {addr}"))?
+                .connect_timeout(Duration::from_secs(3))
+                .timeout(Duration::from_secs(15))
+                .tcp_keepalive(Some(Duration::from_secs(120)))
+                .keep_alive_while_idle(true)
+                .keep_alive_timeout(Duration::from_secs(10))
+                .http2_keep_alive_interval(Duration::from_secs(20))
+                .initial_connection_window_size(4 * 1024 * 1024)
+                .initial_stream_window_size(2 * 1024 * 1024)
+                .concurrency_limit(500)
+                .rate_limit(1500, Duration::from_secs(1))
+                .tcp_nodelay(true);
+
+            endpoints.push(ep);
+        }
+
+        let channel = Channel::balance_list(endpoints.into_iter());
+
+        info!("Successfully created balanced channel for {}", service);
+        Ok(channel)
     }
 }

@@ -5,54 +5,19 @@ global:
 alerting:
   alertmanagers:
     - static_configs:
-        - targets: ["alertmanager:9093"]
+        - targets: [ "alertmanager:9093" ]
 
 scrape_configs:
-  - job_name: "apigateway"
-    scrape_interval: 10s
+  - job_name: 'rust-app-via-otel'
     static_configs:
-      - targets: ["apigateway:5000"]
+      - targets: [ 'otel-collector:8889' ]
         labels:
-          application: "api-gateway"
-
-  - job_name: "auth"
-    scrape_interval: 10s
-    static_configs:
-      - targets: ["auth:8080"]
-        labels:
-          application: "auth"
-
-  - job_name: "user"
-    scrape_interval: 10s
-    static_configs:
-      - targets: ["user:8081"]
-        labels:
-          application: "user"
-
-  - job_name: "role"
-    scrape_interval: 10s
-    static_configs:
-      - targets: ["role:8082"]
-        labels:
-          application: "role"
-
-  - job_name: "product"
-    scrape_interval: 10s
-    static_configs:
-      - targets: ["product:8083"]
-        labels:
-          application: "product"
-
-  - job_name: "order"
-    scrape_interval: 10s
-    static_configs:
-      - targets: ["order:8084"]
-        labels:
-          application: "order"
+          application: 'rust-app'
+          environment: 'production'
 
   - job_name: "node-exporter"
     scrape_interval: 5s
     static_configs:
-      - targets: ["node-exporter:9100"]
+      - targets: [ "node-exporter:9100" ]
         labels:
           application: "node-exporter"

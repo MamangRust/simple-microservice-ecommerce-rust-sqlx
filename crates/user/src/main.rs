@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use axum::Router;
 use genproto::user::{
     user_command_service_server::UserCommandServiceServer,
     user_query_service_server::UserQueryServiceServer,
@@ -15,38 +14,65 @@ use tracing::{error, info, warn};
 use user::{
     config::{myconfig::Config, server_config::ServerConfig},
     handler::{command::UserCommandGrpcServiceImpl, query::UserQueryGrpcServiceImpl},
-    metrics::metrics_handler,
     state::AppState,
 };
 
-#[derive(Clone)]
-struct UserGrpcServiceDeps {
-    user_query_service: Arc<user::service::query::UserQueryService>,
-    user_command_service: Arc<user::service::command::UserCommandService>,
-}
-
 #[tokio::main]
 async fn main() -> Result<()> {
+    let (server_config, state, telemetry) = setup().await.context("Failed to setup application")?;
+
+    let (shutdown_tx, mut shutdown_rx) = broadcast::channel::<()>(1);
+
+    let server_handle = run_servers(server_config, state, shutdown_tx.clone())
+        .await
+        .context("Failed to start servers")?;
+
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => {
+            info!("🛑 Shutdown signal received (Ctrl+C).");
+        }
+        _ = shutdown_rx.recv() => {
+            info!("🛑 Shutdown signal received from internal component.");
+        }
+    }
+
+    shutdown(telemetry, server_handle).await;
+
+    Ok(())
+}
+
+async fn setup() -> Result<(ServerConfig, Arc<AppState>, Telemetry)> {
     dotenv::dotenv().ok();
 
-    let config = Config::init().context("Failed to load configuration")?;
+    let is_dev = std::env::var("DEV_MODE")
+        .map(|v| v == "true" || v == "1")
+        .unwrap_or(false);
+    let is_enable_file = std::env::var("ENABLE_FILE_LOG")
+        .map(|v| v == "true")
+        .unwrap_or(false);
 
+    let config = Config::init().context("Failed to load configuration")?;
     let server_config = ServerConfig::from_config(&config)?;
 
     let telemetry = Telemetry::new("user-service", "http://otel-collector:4317".to_string());
-
     let logger_provider = telemetry.init_logger();
-
     let _meter_provider = telemetry.init_meter();
     let _tracer_provider = telemetry.init_tracer();
 
-    init_logger(logger_provider.clone(), "user-service");
+    init_logger(
+        logger_provider.clone(),
+        "user-service",
+        is_dev,
+        is_enable_file,
+    );
 
-    info!("Starting server user initialization...");
-
-    let db_pool = ConnectionManager::new_pool(&server_config.database_url)
-        .await
-        .context("Failed to initialize database pool")?;
+    let db_pool = ConnectionManager::new_pool(
+        &server_config.database_url,
+        config.db_min_conn,
+        config.db_max_conn,
+    )
+    .await
+    .context("Failed to initialize database pool")?;
 
     run_migrations(&db_pool)
         .await
@@ -58,97 +84,79 @@ async fn main() -> Result<()> {
             .context("Failed to create AppState")?,
     );
 
-    let user_grpc_deps = UserGrpcServiceDeps {
-        user_query_service: Arc::new(state.di_container.user_query.clone()),
-        user_command_service: Arc::new(state.di_container.user_command.clone()),
-    };
+    info!("✅ Application setup completed successfully.");
+    Ok((server_config, state, telemetry))
+}
 
-    let user_query_service_impl =
-        UserQueryGrpcServiceImpl::new(user_grpc_deps.user_query_service.clone());
-    let user_command_service_impl =
-        UserCommandGrpcServiceImpl::new(user_grpc_deps.user_command_service.clone());
-
-    let (shutdown_tx, _) = broadcast::channel(1);
-
+async fn run_servers(
+    server_config: ServerConfig,
+    state: Arc<AppState>,
+    shutdown_tx: broadcast::Sender<()>,
+) -> Result<tokio::task::JoinHandle<()>> {
     let grpc_addr = server_config.grpc_addr;
-    let grpc_shutdown_rx = shutdown_tx.subscribe();
-    let grpc_handle = tokio::spawn(async move {
+
+    let shutdown_tx_for_server = shutdown_tx.clone();
+    let shutdown_tx_for_ctrlc = shutdown_tx.clone();
+
+    let server_handle = tokio::spawn(async move {
         loop {
+            info!("Attempting to start gRPC server on {grpc_addr}");
+            let user_query_service_impl =
+                UserQueryGrpcServiceImpl::new(state.di_container.clone().user_query);
+            let user_command_service_impl =
+                UserCommandGrpcServiceImpl::new(state.di_container.clone().user_command);
+
+            let shutdown_rx = shutdown_tx_for_server.subscribe();
+
             match start_grpc_server(
-                user_query_service_impl.clone(),
-                user_command_service_impl.clone(),
+                user_query_service_impl,
+                user_command_service_impl,
                 grpc_addr,
-                grpc_shutdown_rx.resubscribe(),
+                shutdown_rx,
             )
             .await
             {
                 Ok(()) => {
-                    info!("gRPC server stopped gracefully");
+                    info!("gRPC server stopped gracefully.");
                     break;
                 }
                 Err(e) => {
-                    error!("❌ gRPC server failed: {e}. Restarting in 5s...");
+                    error!("gRPC server failed: {e}. Restarting in 5s...");
                     tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
                 }
             }
         }
     });
 
-    let metrics_addr = server_config.metrics_addr;
-    let state_clone = state.clone();
-    let metrics_shutdown_rx = shutdown_tx.subscribe();
-    let metrics_handle = tokio::spawn(async move {
-        loop {
-            info!("🔧 Starting metrics server on {metrics_addr}");
-            match start_metrics_server(
-                state_clone.clone(),
-                metrics_addr,
-                metrics_shutdown_rx.resubscribe(),
-            )
-            .await
-            {
-                Ok(()) => {
-                    info!("Metrics server stopped gracefully");
-                    break;
-                }
-                Err(e) => {
-                    error!("❌ Metrics server failed: {e}. Retrying in 3s...");
-                    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-                }
-            }
-        }
-    });
-
-    let signal_shutdown_tx = shutdown_tx.clone();
     tokio::spawn(async move {
-        match tokio::signal::ctrl_c().await {
-            Ok(()) => {
-                info!("🛑 Shutdown signal received.");
-                if let Err(e) = signal_shutdown_tx.send(()) {
-                    warn!("Failed to send shutdown signal: {}", e);
-                }
-            }
-            Err(e) => {
-                error!("Failed to listen for shutdown signal: {}", e);
+        if let Err(e) = tokio::signal::ctrl_c().await {
+            error!("Failed to listen for shutdown signal: {}", e);
+        } else {
+            info!("Ctrl+C signal detected, broadcasting shutdown...");
+            if let Err(e) = shutdown_tx_for_ctrlc.send(()) {
+                warn!("Failed to send shutdown signal: {}", e);
             }
         }
     });
 
-    let mut shutdown_rx = shutdown_tx.subscribe();
-    let _ = shutdown_rx.recv().await;
+    Ok(server_handle)
+}
 
+async fn shutdown(telemetry: Telemetry, server_handle: tokio::task::JoinHandle<()>) {
     info!("🛑 Shutting down all servers...");
 
     let shutdown_timeout = tokio::time::Duration::from_secs(30);
-    let shutdown_result = tokio::time::timeout(shutdown_timeout, async {
-        let _ = tokio::join!(grpc_handle, metrics_handle);
-    })
-    .await;
+    let shutdown_result = tokio::time::timeout(shutdown_timeout, server_handle).await;
 
     match shutdown_result {
-        Ok(()) => info!("✅ All servers shutdown gracefully"),
+        Ok(join_result) => {
+            if let Err(e) = join_result {
+                error!("Server task panicked: {}", e);
+            }
+            info!("✅ All servers shutdown gracefully.");
+        }
         Err(_) => {
-            warn!("⚠️  Shutdown timeout reached, forcing exit");
+            warn!("⚠️  Shutdown timeout reached, forcing exit.");
         }
     }
 
@@ -157,8 +165,6 @@ async fn main() -> Result<()> {
     }
 
     info!("✅ User Service shutdown complete.");
-
-    Ok(())
 }
 
 async fn start_grpc_server(
@@ -180,37 +186,6 @@ async fn start_grpc_server(
         .serve_with_shutdown(addr, shutdown_future)
         .await
         .context("gRPC server failed to start or serve")
-}
-
-async fn start_metrics_server(
-    state: Arc<AppState>,
-    addr: std::net::SocketAddr,
-    mut shutdown_rx: broadcast::Receiver<()>,
-) -> Result<()> {
-    info!("Starting metrics server on {}", addr);
-
-    let app = Router::new()
-        .route("/metrics", axum::routing::get(metrics_handler))
-        .route("/health", axum::routing::get(health_check))
-        .with_state(state);
-
-    let listener = tokio::net::TcpListener::bind(addr)
-        .await
-        .with_context(|| format!("Failed to bind metrics listener on {addr}"))?;
-
-    let shutdown_future = async move {
-        let _ = shutdown_rx.recv().await;
-        info!("Metrics server received shutdown signal");
-    };
-
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_future)
-        .await
-        .context("Metrics server failed to start or serve")
-}
-
-async fn health_check() -> &'static str {
-    "OK"
 }
 
 pub async fn run_migrations(pool: &Pool<Postgres>) -> anyhow::Result<()> {

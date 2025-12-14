@@ -17,7 +17,6 @@ use opentelemetry::{
     global::{self, BoxedTracer},
     trace::{Span, SpanKind, TraceContextExt, Tracer},
 };
-use prometheus_client::registry::Registry;
 use shared::{
     cache::CacheStore,
     errors::ServiceError,
@@ -36,23 +35,8 @@ pub struct OrderQueryService {
 }
 
 impl OrderQueryService {
-    pub fn new(
-        query: DynOrderQueryRepository,
-        registry: &mut Registry,
-        cache_store: Arc<CacheStore>,
-    ) -> Result<Self> {
-        let metrics = Metrics::new();
-
-        registry.register(
-            "order_query_service_request_counter",
-            "Total number of requests to the OrderQueryService",
-            metrics.request_counter.clone(),
-        );
-        registry.register(
-            "order_query_service_request_duration",
-            "Histogram of request durations for the OrderQueryService",
-            metrics.request_duration.clone(),
-        );
+    pub fn new(query: DynOrderQueryRepository, cache_store: Arc<CacheStore>) -> Result<Self> {
+        let metrics = Metrics::new(global::meter("order-query-service"));
 
         Ok(Self {
             query,
@@ -191,6 +175,7 @@ impl OrderQueryServiceTrait for OrderQueryService {
         if let Some(cache) = self
             .cache_store
             .get_from_cache::<ApiResponsePagination<Vec<OrderResponse>>>(&cache_key)
+            .await
         {
             let log_message = format!("✅ Found cached orders (total: {})", cache.data.len());
             info!("{log_message}");
@@ -237,7 +222,8 @@ impl OrderQueryServiceTrait for OrderQueryService {
         };
 
         self.cache_store
-            .set_to_cache(&cache_key, &response.clone(), Duration::minutes(5));
+            .set_to_cache(&cache_key, &response.clone(), Duration::minutes(5))
+            .await;
 
         info!("✅ Found {} orders (total: {total})", response.data.len());
 
@@ -284,6 +270,7 @@ impl OrderQueryServiceTrait for OrderQueryService {
         if let Some(cache) = self
             .cache_store
             .get_from_cache::<ApiResponsePagination<Vec<OrderResponseDeleteAt>>>(&cache_key)
+            .await
         {
             let log_message = format!(
                 "✅ Found cached active orders (total: {})",
@@ -337,7 +324,8 @@ impl OrderQueryServiceTrait for OrderQueryService {
         };
 
         self.cache_store
-            .set_to_cache(&cache_key, &response.clone(), Duration::minutes(5));
+            .set_to_cache(&cache_key, &response.clone(), Duration::minutes(5))
+            .await;
 
         info!(
             "✅ Found {} active orders (total: {total})",
@@ -387,6 +375,7 @@ impl OrderQueryServiceTrait for OrderQueryService {
         if let Some(cache) = self
             .cache_store
             .get_from_cache::<ApiResponsePagination<Vec<OrderResponseDeleteAt>>>(&cache_key)
+            .await
         {
             let log_message = format!(
                 "✅ Found cached trashed orders (total: {})",
@@ -440,7 +429,8 @@ impl OrderQueryServiceTrait for OrderQueryService {
         };
 
         self.cache_store
-            .set_to_cache(&cache_key, &response.clone(), Duration::minutes(5));
+            .set_to_cache(&cache_key, &response.clone(), Duration::minutes(5))
+            .await;
 
         info!(
             "✅ Found {} trashed orders (total: {total})",
@@ -470,6 +460,7 @@ impl OrderQueryServiceTrait for OrderQueryService {
         if let Some(cache) = self
             .cache_store
             .get_from_cache::<ApiResponse<OrderResponse>>(&cache_key)
+            .await
         {
             info!("✅ Found order in cache");
             self.complete_tracing_success(&tracing_ctx, method, "Order retrieved from cache")
@@ -509,7 +500,8 @@ impl OrderQueryServiceTrait for OrderQueryService {
         };
 
         self.cache_store
-            .set_to_cache(&cache_key, &response, Duration::minutes(5));
+            .set_to_cache(&cache_key, &response, Duration::minutes(5))
+            .await;
 
         info!(
             "✅ Found order: ID={id}, total_price={}",

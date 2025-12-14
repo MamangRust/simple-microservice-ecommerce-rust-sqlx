@@ -22,7 +22,6 @@ use opentelemetry::{
     global::{self, BoxedTracer},
     trace::{Span, SpanKind, TraceContextExt, Tracer},
 };
-use prometheus_client::registry::Registry;
 use shared::{
     errors::{AppErrorGrpc, HttpError},
     utils::{MetadataInjector, Method, Metrics, Status as StatusUtils, TracingContext},
@@ -38,19 +37,8 @@ pub struct AuthGrpcClientService {
 }
 
 impl AuthGrpcClientService {
-    pub fn new(client: AuthServiceClient<Channel>, registry: &mut Registry) -> Result<Self> {
-        let metrics = Metrics::new();
-
-        registry.register(
-            "auth_service_client_request_counter",
-            "Total number of requests to the AuthGrpcClientService",
-            metrics.request_counter.clone(),
-        );
-        registry.register(
-            "auth_service_client_request_duration",
-            "Histogram of request durations for the AuthGrpcClientService",
-            metrics.request_duration.clone(),
-        );
+    pub fn new(client: AuthServiceClient<Channel>) -> Result<Self> {
+        let metrics = Metrics::new(global::meter("auth-service-client"));
 
         Ok(Self { client, metrics })
     }

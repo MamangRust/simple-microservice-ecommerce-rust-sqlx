@@ -1,10 +1,13 @@
-use std::sync::OnceLock;
+use std::{sync::OnceLock, time::Duration};
 
 use anyhow::Result;
 use opentelemetry::{Context, global};
 use opentelemetry_otlp::{LogExporter, MetricExporter, SpanExporter, WithExportConfig};
 use opentelemetry_sdk::{
-    Resource, logs::SdkLoggerProvider, metrics::SdkMeterProvider, trace::SdkTracerProvider,
+    Resource,
+    logs::SdkLoggerProvider,
+    metrics::{PeriodicReader, SdkMeterProvider},
+    trace::SdkTracerProvider,
 };
 use tokio::time::Instant;
 
@@ -59,17 +62,22 @@ impl Telemetry {
         let exporter = MetricExporter::builder()
             .with_tonic()
             .with_endpoint(self.otel_endpoint.clone())
+            .with_timeout(Duration::from_secs(10))
             .build()
-            .expect("Failed to create metric exporter");
+            .expect("failed to build OTLP metric exporter");
 
-        let metrics = SdkMeterProvider::builder()
-            .with_resource(self.get_resource())
-            .with_periodic_exporter(exporter)
+        let reader = PeriodicReader::builder(exporter)
+            .with_interval(Duration::from_secs(5))
             .build();
 
-        global::set_meter_provider(metrics.clone());
+        let provider = SdkMeterProvider::builder()
+            .with_resource(self.get_resource())
+            .with_reader(reader)
+            .build();
 
-        metrics
+        global::set_meter_provider(provider.clone());
+
+        provider
     }
 
     pub fn init_logger(&self) -> SdkLoggerProvider {

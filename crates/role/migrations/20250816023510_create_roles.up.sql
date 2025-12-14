@@ -8,8 +8,14 @@ CREATE TABLE IF NOT EXISTS roles (
 );
 
 -- Indeks
-CREATE INDEX IF NOT EXISTS idx_roles_role_name ON roles (role_name);
+CREATE INDEX IF NOT EXISTS idx_roles_active_name ON roles (role_name)
+WHERE
+    deleted_at IS NULL;
 
-CREATE INDEX IF NOT EXISTS idx_roles_created_at ON roles (created_at);
+CREATE INDEX IF NOT EXISTS idx_roles_active_created_at ON roles (created_at DESC)
+WHERE
+    deleted_at IS NULL;
 
-CREATE INDEX IF NOT EXISTS idx_roles_updated_at ON roles (updated_at);
+CREATE INDEX IF NOT EXISTS idx_roles_trashed_created_at ON roles (created_at DESC)
+WHERE
+    deleted_at IS NOT NULL;

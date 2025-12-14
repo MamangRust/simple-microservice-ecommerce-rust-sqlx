@@ -1,3 +1,6 @@
+use crate::abstract_trait::auth::{
+    DynIdentityService, DynLoginService, DynPasswordResetService, DynRegisterService,
+};
 use crate::{
     abstract_trait::{auth::DynTokenService, grpc_client::user::DynUserGrpcClient},
     grpc_client::{GrpcClients, user::UserGrpcClientService},
@@ -11,29 +14,28 @@ use crate::{
     },
 };
 use anyhow::{Context, Result};
-use prometheus_client::registry::Registry;
 use shared::{
     abstract_trait::{DynHashing, DynJwtService, DynKafka},
     cache::CacheStore,
-    config::{ConnectionPool, RedisClient},
+    config::{ConnectionPool, RedisPool},
 };
 use std::{fmt, sync::Arc};
 
 #[derive(Clone)]
 pub struct DependenciesInject {
-    pub login_service: LoginService,
-    pub register_service: RegisterService,
-    pub identity_service: IdentityService,
-    pub password_reset_service: PasswordResetService,
+    pub login_service: DynLoginService,
+    pub register_service: DynRegisterService,
+    pub identity_service: DynIdentityService,
+    pub password_reset_service: DynPasswordResetService,
 }
 
 impl fmt::Debug for DependenciesInject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DependenciesInject")
-            .field("login_service", &"LoginService")
-            .field("register_service", &"RegisterService")
-            .field("identity_service", &"IdentityService")
-            .field("password_reset_service", &"PasswordResetService")
+            .field("login_service", &"DynLoginService")
+            .field("register_service", &"DynRegisterService")
+            .field("identity_service", &"DynIdentityService")
+            .field("password_reset_service", &"DynPasswordResetService")
             .finish()
     }
 }
@@ -44,15 +46,11 @@ pub struct DependenciesInjectDeps {
     pub hash: DynHashing,
     pub jwt_config: DynJwtService,
     pub kafka: DynKafka,
-    pub redis: RedisClient,
+    pub redis: RedisPool,
 }
 
 impl DependenciesInject {
-    pub async fn new(
-        deps: DependenciesInjectDeps,
-        clients: GrpcClients,
-        registry: &mut Registry,
-    ) -> Result<Self> {
+    pub async fn new(deps: DependenciesInjectDeps, clients: GrpcClients) -> Result<Self> {
         let DependenciesInjectDeps {
             hash,
             pool,
@@ -61,7 +59,7 @@ impl DependenciesInject {
             redis,
         } = deps;
 
-        let cache = Arc::new(CacheStore::new(redis.client.clone()));
+        let cache = Arc::new(CacheStore::new(redis.pool.clone()));
 
         let refresh_token = RefreshTokenRepository::new(pool.clone());
         let reset_token = ResetTokenRepository::new(pool.clone());
@@ -78,7 +76,8 @@ impl DependenciesInject {
         };
 
         let register_service =
-            RegisterService::new(register_deps, registry).context("failed initialize register")?;
+            Arc::new(RegisterService::new(register_deps).context("failed initialize register")?)
+                as DynRegisterService;
 
         let token_service = Arc::new(TokenService::new(
             jwt_config.clone(),
@@ -93,7 +92,8 @@ impl DependenciesInject {
         };
 
         let login_service =
-            LoginService::new(login_deps, registry).context("failed initialize login")?;
+            Arc::new(LoginService::new(login_deps).context("failed initialize login")?)
+                as DynLoginService;
 
         let identity_deps = IdentityServiceDeps {
             refresh_token_command: refresh_token.command.clone(),
@@ -104,7 +104,8 @@ impl DependenciesInject {
         };
 
         let identity_service =
-            IdentityService::new(identity_deps, registry).context("failed initialize identity")?;
+            Arc::new(IdentityService::new(identity_deps).context("failed initialize identity")?)
+                as DynIdentityService;
 
         let password_deps = PasswordResetServiceDeps {
             reset_token_query: reset_token.query,
@@ -114,8 +115,9 @@ impl DependenciesInject {
             cache_store: cache.clone(),
         };
 
-        let password_reset_service = PasswordResetService::new(password_deps, registry)
-            .context("failed iniliazlie password reset")?;
+        let password_reset_service = Arc::new(
+            PasswordResetService::new(password_deps).context("failed iniliazlie password reset")?,
+        ) as DynPasswordResetService;
 
         Ok(Self {
             login_service,

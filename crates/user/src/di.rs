@@ -1,3 +1,4 @@
+use crate::abstract_trait::user::service::{DynUserCommandService, DynUserQueryService};
 use crate::{
     abstract_trait::grpc_client::{role::DynRoleGrpcClient, user_role::DynUserRoleGrpcClient},
     grpc_client::{GrpcClients, role::RoleGrpcClientService, user_role::UserRoleGrpcClientService},
@@ -8,11 +9,10 @@ use crate::{
     },
 };
 use anyhow::{Context, Result};
-use prometheus_client::registry::Registry;
 use shared::{
     abstract_trait::DynHashing,
     cache::CacheStore,
-    config::{ConnectionPool, RedisClient},
+    config::{ConnectionPool, RedisPool},
 };
 use std::{fmt, sync::Arc};
 
@@ -20,30 +20,26 @@ use std::{fmt, sync::Arc};
 pub struct DependenciesInjectDeps {
     pub pool: ConnectionPool,
     pub hash: DynHashing,
-    pub redis: RedisClient,
+    pub redis: RedisPool,
 }
 
 #[derive(Clone)]
 pub struct DependenciesInject {
-    pub user_query: UserQueryService,
-    pub user_command: UserCommandService,
+    pub user_query: DynUserQueryService,
+    pub user_command: DynUserCommandService,
 }
 
 impl fmt::Debug for DependenciesInject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DependenciesInject")
-            .field("user_query", &"UserQueryService")
-            .field("user_command", &"UserCommandService")
+            .field("user_query", &"DynUserQueryService")
+            .field("user_command", &"DynUserCommandService")
             .finish()
     }
 }
 
 impl DependenciesInject {
-    pub fn new(
-        deps: DependenciesInjectDeps,
-        clients: GrpcClients,
-        registry: &mut Registry,
-    ) -> Result<Self> {
+    pub fn new(deps: DependenciesInjectDeps, clients: GrpcClients) -> Result<Self> {
         let DependenciesInjectDeps { hash, pool, redis } = deps;
 
         let user_query_repo = Arc::new(UserQueryRepository::new(pool.clone()));
@@ -54,10 +50,12 @@ impl DependenciesInject {
         let user_role_client: DynUserRoleGrpcClient =
             Arc::new(UserRoleGrpcClientService::new(clients.user_role_client));
 
-        let cache = Arc::new(CacheStore::new(redis.client.clone()));
+        let cache = Arc::new(CacheStore::new(redis.pool.clone()));
 
-        let user_query = UserQueryService::new(user_query_repo.clone(), registry, cache.clone())
-            .context("failed intialize user query")?;
+        let user_query = Arc::new(
+            UserQueryService::new(user_query_repo.clone(), cache.clone())
+                .context("failed intialize user query")?,
+        ) as DynUserQueryService;
 
         let user_command_deps = UserCommandServiceDeps {
             hash,
@@ -67,8 +65,9 @@ impl DependenciesInject {
             command: user_command_repo,
         };
 
-        let user_command = UserCommandService::new(user_command_deps, registry)
-            .context("failed initialize user command")?;
+        let user_command = Arc::new(
+            UserCommandService::new(user_command_deps).context("failed initialize user command")?,
+        ) as DynUserCommandService;
 
         Ok(Self {
             user_query,

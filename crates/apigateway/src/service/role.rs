@@ -13,6 +13,7 @@ use crate::{
 };
 use anyhow::Result;
 use async_trait::async_trait;
+use chrono::Duration;
 use genproto::role::{
     CreateRoleRequest, FindAllRoleRequest, FindByIdRoleRequest, FindByIdUserRoleRequest,
     UpdateRoleRequest, role_command_service_client::RoleCommandServiceClient,
@@ -23,45 +24,37 @@ use opentelemetry::{
     global::{self, BoxedTracer},
     trace::{Span, SpanKind, TraceContextExt, Tracer},
 };
-use prometheus_client::registry::Registry;
+use shared::cache::CacheStore;
 use shared::{
     errors::{AppErrorGrpc, HttpError},
     utils::{MetadataInjector, Method, Metrics, Status as StatusUtils, TracingContext},
 };
+use std::sync::Arc;
 use tokio::time::Instant;
 use tonic::{Request, transport::Channel};
 use tracing::{error, info};
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct RoleGrpcClientService {
     query_client: RoleQueryServiceClient<Channel>,
     command_client: RoleCommandServiceClient<Channel>,
     metrics: Metrics,
+    cache_store: Arc<CacheStore>,
 }
 
 impl RoleGrpcClientService {
     pub fn new(
         query_client: RoleQueryServiceClient<Channel>,
         command_client: RoleCommandServiceClient<Channel>,
-        registry: &mut Registry,
+        cache_store: Arc<CacheStore>,
     ) -> Result<Self> {
-        let metrics = Metrics::new();
-
-        registry.register(
-            "role_service_client_request_counter",
-            "Total number of requests to the RoleGrpcClientService",
-            metrics.request_counter.clone(),
-        );
-        registry.register(
-            "role_service_client_duration",
-            "Histogram of request durations for the RoleGrpcClientService",
-            metrics.request_duration.clone(),
-        );
+        let metrics = Metrics::new(global::meter("role-client-service"));
 
         Ok(Self {
             query_client,
             command_client,
             metrics,
+            cache_store,
         })
     }
     fn get_tracer(&self) -> BoxedTracer {
@@ -159,9 +152,12 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
         &self,
         req: &DomainFindAllRoles,
     ) -> Result<ApiResponsePagination<Vec<RoleResponse>>, HttpError> {
+        let page = req.page;
+        let page_size = req.page_size;
+
         info!(
             "Retrieving all role (page: {}, size: {} search: {})",
-            req.page, req.page_size, req.search
+            page, page_size, req.search
         );
 
         let method = Method::Get;
@@ -170,19 +166,36 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
             vec![
                 KeyValue::new("component", "role"),
                 KeyValue::new("operation", "find_all"),
-                KeyValue::new("page", req.page.to_string()),
-                KeyValue::new("page_size", req.page_size.to_string()),
+                KeyValue::new("page", page.to_string()),
+                KeyValue::new("page_size", page_size.to_string()),
                 KeyValue::new("search", req.search.clone()),
             ],
         );
 
         let mut request = Request::new(FindAllRoleRequest {
-            page: req.page,
-            page_size: req.page_size,
+            page,
+            page_size,
             search: req.search.clone(),
         });
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
+
+        let cache_key = format!(
+            "role:find_all:page:{page}:size:{page_size}:search:{}",
+            req.search.clone(),
+        );
+
+        if let Some(cache) = self
+            .cache_store
+            .get_from_cache::<ApiResponsePagination<Vec<RoleResponse>>>(&cache_key)
+            .await
+        {
+            let log_msg = format!("✅ Found {} roles in cache", cache.data.len());
+            info!("{log_msg}");
+            self.complete_tracing_success(&tracing_ctx, method, &log_msg)
+                .await;
+            return Ok(cache);
+        }
 
         let response = match self.query_client.clone().find_all_role(request).await {
             Ok(response) => {
@@ -203,24 +216,31 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
 
         let role_len = roles.len();
 
-        let reply = ApiResponsePagination {
+        let api_response = ApiResponsePagination {
             status: inner.status,
             message: inner.message,
             data: roles,
             pagination: inner.pagination.unwrap_or_default().into(),
         };
 
+        self.cache_store
+            .set_to_cache(&cache_key, &api_response, Duration::minutes(30))
+            .await;
+
         info!("Successfully fetched {role_len} Roles");
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn find_active(
         &self,
         req: &DomainFindAllRoles,
     ) -> Result<ApiResponsePagination<Vec<RoleResponseDeleteAt>>, HttpError> {
+        let page = req.page;
+        let page_size = req.page_size;
+
         info!(
-            "Retrieving all active role (page: {}, size: {} search: {})",
-            req.page, req.page_size, req.search
+            "Retrieving all active role (page: {page}, size: {page_size} search: {})",
+            req.search
         );
 
         let method = Method::Get;
@@ -229,19 +249,36 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
             vec![
                 KeyValue::new("component", "role"),
                 KeyValue::new("operation", "find_active"),
-                KeyValue::new("page", req.page.to_string()),
-                KeyValue::new("page_size", req.page_size.to_string()),
+                KeyValue::new("page", page.to_string()),
+                KeyValue::new("page_size", page_size.to_string()),
                 KeyValue::new("search", req.search.clone()),
             ],
         );
 
         let mut request = Request::new(FindAllRoleRequest {
-            page: req.page,
-            page_size: req.page_size,
+            page,
+            page_size,
             search: req.search.clone(),
         });
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
+
+        let cache_key = format!(
+            "role:find_active:page:{page}:size:{page_size}:search:{}",
+            req.search.clone()
+        );
+
+        if let Some(cache) = self
+            .cache_store
+            .get_from_cache::<ApiResponsePagination<Vec<RoleResponseDeleteAt>>>(&cache_key)
+            .await
+        {
+            let log_msg = format!("✅ Found {} active roles in cache", cache.data.len());
+            info!("{log_msg}");
+            self.complete_tracing_success(&tracing_ctx, method, &log_msg)
+                .await;
+            return Ok(cache);
+        }
 
         let response = match self.query_client.clone().find_by_active(request).await {
             Ok(response) => {
@@ -262,24 +299,31 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
 
         let roles_len = roles.len();
 
-        let reply = ApiResponsePagination {
+        let api_response = ApiResponsePagination {
             status: inner.status,
             message: inner.message,
             data: roles,
             pagination: inner.pagination.unwrap_or_default().into(),
         };
 
+        self.cache_store
+            .set_to_cache(&cache_key, &api_response, Duration::minutes(30))
+            .await;
+
         info!("Successfully fetched {roles_len} active Roles");
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn find_trashed(
         &self,
         req: &DomainFindAllRoles,
     ) -> Result<ApiResponsePagination<Vec<RoleResponseDeleteAt>>, HttpError> {
+        let page = req.page;
+        let page_size = req.page_size;
+
         info!(
-            "Retrieving all trashed role (page: {}, size: {} search: {})",
-            req.page, req.page_size, req.search
+            "Retrieving all trashed role (page: {page}, size: {page_size} search: {})",
+            req.search
         );
 
         let method = Method::Get;
@@ -288,19 +332,36 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
             vec![
                 KeyValue::new("component", "role"),
                 KeyValue::new("operation", "find_trashed"),
-                KeyValue::new("page", req.page.to_string()),
-                KeyValue::new("page_size", req.page_size.to_string()),
+                KeyValue::new("page", page.to_string()),
+                KeyValue::new("page_size", page_size.to_string()),
                 KeyValue::new("search", req.search.clone()),
             ],
         );
 
         let mut request = Request::new(FindAllRoleRequest {
-            page: req.page,
-            page_size: req.page_size,
+            page,
+            page_size,
             search: req.search.clone(),
         });
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
+
+        let cache_key = format!(
+            "role:find_trashed:page:{page}:size:{page_size}:search:{:?}",
+            req.search.clone()
+        );
+
+        if let Some(cache) = self
+            .cache_store
+            .get_from_cache::<ApiResponsePagination<Vec<RoleResponseDeleteAt>>>(&cache_key)
+            .await
+        {
+            let log_msg = format!("✅ Found {} trashed roles in cache", cache.data.len());
+            info!("{log_msg}");
+            self.complete_tracing_success(&tracing_ctx, method, &log_msg)
+                .await;
+            return Ok(cache);
+        }
 
         let response = match self.query_client.clone().find_by_trashed(request).await {
             Ok(response) => {
@@ -321,15 +382,19 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
 
         let roles_len = roles.len();
 
-        let reply = ApiResponsePagination {
+        let api_response = ApiResponsePagination {
             status: inner.status,
             message: inner.message,
             data: roles,
             pagination: inner.pagination.unwrap_or_default().into(),
         };
 
+        self.cache_store
+            .set_to_cache(&cache_key, &api_response, Duration::minutes(30))
+            .await;
+
         info!("Successfully fetched {roles_len} trashed Roles");
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn find_by_id(&self, id: i32) -> Result<ApiResponse<RoleResponse>, HttpError> {
@@ -348,6 +413,19 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
         let mut request = Request::new(FindByIdRoleRequest { role_id: id });
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
+
+        let cache_key = format!("role:find_by_id:id:{id}");
+
+        if let Some(cache) = self
+            .cache_store
+            .get_from_cache::<ApiResponse<RoleResponse>>(&cache_key)
+            .await
+        {
+            info!("✅ Found role in cache");
+            self.complete_tracing_success(&tracing_ctx, method, "Role retrieved from cache")
+                .await;
+            return Ok(cache);
+        }
 
         let response = match self.query_client.clone().find_by_id_role(request).await {
             Ok(response) => {
@@ -374,14 +452,18 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
 
         let role_name = domain_role.clone().role_name;
 
-        let reply = ApiResponse {
+        let api_response = ApiResponse {
             status: inner.status,
             message: inner.message,
             data: domain_role.clone(),
         };
 
+        self.cache_store
+            .set_to_cache(&cache_key, &api_response, Duration::minutes(30))
+            .await;
+
         info!("Successfully fetched Role: {role_name}");
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn find_by_user_id(
@@ -404,6 +486,19 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
+        let cache_key = format!("role:find_by_user_id:user_id:{user_id}");
+
+        if let Some(cache) = self
+            .cache_store
+            .get_from_cache::<ApiResponse<Vec<RoleResponse>>>(&cache_key)
+            .await
+        {
+            info!("✅ Found role in cache");
+            self.complete_tracing_success(&tracing_ctx, method, "Role retrieved from cache")
+                .await;
+            return Ok(cache);
+        }
+
         let response = match self.query_client.clone().find_by_user_id(request).await {
             Ok(response) => {
                 self.complete_tracing_success(&tracing_ctx, method, "Successfully fetched roles")
@@ -421,18 +516,22 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
 
         let roles: Vec<RoleResponse> = inner.data.into_iter().map(RoleResponse::from).collect();
 
-        let reply = ApiResponse {
+        let api_response = ApiResponse {
             status: inner.status,
             message: inner.message,
             data: roles.clone(),
         };
+
+        self.cache_store
+            .set_to_cache(&cache_key, &api_response, Duration::minutes(30))
+            .await;
 
         info!(
             "Successfully fetched {} roles for user_id {}",
             roles.len(),
             user_id
         );
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn create_role(
@@ -480,14 +579,14 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
 
         let domain_role: RoleResponse = role_data.into();
 
-        let reply = ApiResponse {
+        let api_response = ApiResponse {
             status: inner.status,
             message: inner.message,
             data: domain_role,
         };
 
         info!("Role {} created successfully", req.name);
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn update_role(
@@ -543,14 +642,14 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
 
         let role_name = domain_role.clone().role_name;
 
-        let reply = ApiResponse {
+        let api_response = ApiResponse {
             status: inner.status,
             message: inner.message,
             data: domain_role,
         };
 
         info!("Role {role_name} updated successfully");
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn trash_role(&self, id: i32) -> Result<ApiResponse<RoleResponseDeleteAt>, HttpError> {
@@ -597,14 +696,14 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
 
         let domain_role: RoleResponseDeleteAt = role_data.into();
 
-        let reply = ApiResponse {
+        let api_response = ApiResponse {
             status: inner.status,
             message: inner.message,
             data: domain_role,
         };
 
         info!("Role {} soft deleted successfully", id);
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn restore_role(&self, id: i32) -> Result<ApiResponse<RoleResponseDeleteAt>, HttpError> {
@@ -647,14 +746,14 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
 
         let domain_role: RoleResponseDeleteAt = role_data.into();
 
-        let reply = ApiResponse {
+        let api_response = ApiResponse {
             status: inner.status,
             message: inner.message,
             data: domain_role,
         };
 
         info!("Role {} restored successfully", id);
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn delete_ole(&self, id: i32) -> Result<ApiResponse<()>, HttpError> {
@@ -694,14 +793,14 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
 
         let inner = response.into_inner();
 
-        let reply = ApiResponse {
+        let api_response = ApiResponse {
             status: inner.status,
             message: inner.message,
             data: (),
         };
 
         info!("Role {} permanently deleted", id);
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn restore_all_role(&self) -> Result<ApiResponse<()>, HttpError> {
@@ -735,14 +834,14 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
 
         let inner = response.into_inner();
 
-        let reply = ApiResponse {
+        let api_response = ApiResponse {
             status: inner.status,
             message: inner.message,
             data: (),
         };
 
         info!("All Roles restored successfully");
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn delete_all_role(&self) -> Result<ApiResponse<()>, HttpError> {
@@ -785,13 +884,13 @@ impl RoleGrpcClientTrait for RoleGrpcClientService {
 
         let inner = response.into_inner();
 
-        let reply = ApiResponse {
+        let api_response = ApiResponse {
             status: inner.status,
             message: inner.message,
             data: (),
         };
 
         info!("All trashed Roles permanently deleted");
-        Ok(reply)
+        Ok(api_response)
     }
 }

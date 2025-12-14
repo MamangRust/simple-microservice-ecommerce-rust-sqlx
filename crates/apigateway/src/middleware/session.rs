@@ -51,7 +51,9 @@ pub async fn session_middleware(
 
     let key = format!("session:{user_id}");
 
-    session_service.create_session(&key, &session, Duration::minutes(30));
+    session_service
+        .create_session(&key, &session, Duration::minutes(30))
+        .await;
 
     req.extensions_mut().insert(session.clone());
 

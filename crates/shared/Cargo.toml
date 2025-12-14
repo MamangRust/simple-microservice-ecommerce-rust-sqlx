@@ -15,6 +15,7 @@ bcrypt.workspace = true
 chrono.workspace = true
 dotenv.workspace = true
 redis.workspace = true
+deadpool-redis.workspace = true
 jsonwebtoken.workspace = true
 serde.workspace = true
 serde_json.workspace = true

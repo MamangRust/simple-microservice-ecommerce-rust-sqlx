@@ -4,7 +4,7 @@ pub mod di;
 pub mod domain;
 pub mod grpc_client;
 pub mod handler;
-pub mod metrics;
+// pub mod metrics;
 pub mod models;
 pub mod repository;
 pub mod service;

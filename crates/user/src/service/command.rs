@@ -27,7 +27,6 @@ use opentelemetry::{
     global::{self, BoxedTracer},
     trace::{Span, SpanKind, TraceContextExt, Tracer},
 };
-use prometheus_client::registry::Registry;
 use shared::{
     abstract_trait::DynHashing,
     errors::ServiceError,
@@ -56,8 +55,8 @@ pub struct UserCommandServiceDeps {
 }
 
 impl UserCommandService {
-    pub fn new(deps: UserCommandServiceDeps, registry: &mut Registry) -> Result<Self> {
-        let metrics = Metrics::default();
+    pub fn new(deps: UserCommandServiceDeps) -> Result<Self> {
+        let metrics = Metrics::new(global::meter("user-command-service"));
 
         let UserCommandServiceDeps {
             role_client,
@@ -66,17 +65,6 @@ impl UserCommandService {
             command,
             hash,
         } = deps;
-
-        registry.register(
-            "user_command_service_request_counter",
-            "Total number of requests to the UserCommandService",
-            metrics.request_counter.clone(),
-        );
-        registry.register(
-            "user_command_service_request_duration",
-            "Histogram of request durations for the UserCommandService",
-            metrics.request_duration.clone(),
-        );
 
         Ok(Self {
             role_client,

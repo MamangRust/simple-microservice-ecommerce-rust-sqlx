@@ -18,7 +18,6 @@ use opentelemetry::{
     global::{self, BoxedTracer},
     trace::{Span, SpanKind, TraceContextExt, Tracer},
 };
-use prometheus_client::registry::Registry;
 use shared::{
     errors::ServiceError,
     utils::{MetadataInjector, Method, Metrics, Status as StatusUtils, TracingContext},
@@ -34,19 +33,8 @@ pub struct RoleCommandService {
 }
 
 impl RoleCommandService {
-    pub fn new(command: DynRoleCommandRepository, registry: &mut Registry) -> Result<Self> {
-        let metrics = Metrics::new();
-
-        registry.register(
-            "role_command_service_request_counter",
-            "Total number of requests to the RoleCommandService",
-            metrics.request_counter.clone(),
-        );
-        registry.register(
-            "role_command_service_request_duration",
-            "Histogram of request durations for the RoleCommandService",
-            metrics.request_duration.clone(),
-        );
+    pub fn new(command: DynRoleCommandRepository) -> Result<Self> {
+        let metrics = Metrics::new(global::meter("role-command-service"));
 
         Ok(Self { command, metrics })
     }

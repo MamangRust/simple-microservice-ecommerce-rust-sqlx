@@ -16,6 +16,8 @@ pub struct Config {
     pub user: ServiceConfig,
     pub role: ServiceConfig,
     pub kafka_broker: String,
+    pub db_max_conn: u32,
+    pub db_min_conn: u32,
 }
 impl Config {
     pub fn init() -> Result<Self> {
@@ -39,6 +41,16 @@ impl Config {
                 ));
             }
         };
+
+        let db_max_conn: u32 = std::env::var("DB_MAX_CONNECTION")
+            .unwrap_or_else(|_| "5".to_string())
+            .parse::<u32>()
+            .context("Unable to parse DB_MAX_CONNECTION as u32")?;
+
+        let db_min_conn: u32 = std::env::var("DB_MIN_CONNECTION")
+            .unwrap_or_else(|_| "1".to_string())
+            .parse::<u32>()
+            .context("Unable to parse DB_MIN_CONNECTION as u32")?;
 
         let port = port_str
             .parse::<u16>()
@@ -95,6 +107,8 @@ impl Config {
                 metric_port: role_metric_port,
             },
             kafka_broker,
+            db_max_conn,
+            db_min_conn,
         })
     }
 }

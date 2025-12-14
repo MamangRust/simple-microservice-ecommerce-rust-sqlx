@@ -43,6 +43,6 @@ COPY --from=builder --chown=appuser:appuser /app/target/release/auth ./server
 
 USER appuser
 
-EXPOSE 50051 8080
+EXPOSE 50051
 
 CMD ["./server"]

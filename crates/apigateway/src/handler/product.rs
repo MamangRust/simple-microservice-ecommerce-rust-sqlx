@@ -11,7 +11,7 @@ use crate::{
 };
 use crate::{
     middleware::{
-        jwt::auth_middleware, rate_limit::rate_limit_middleware, session::session_middleware,
+        jwt::auth_middleware, session::session_middleware,
         validate::SimpleValidatedJson,
     },
     state::AppState,
@@ -51,6 +51,7 @@ pub async fn get_products(
 
     let current_session = session
         .get_session(&key)
+        .await
         .ok_or_else(|| HttpError::Unauthorized("Session expired or not found".to_string()))?;
 
     if !current_session
@@ -89,6 +90,7 @@ pub async fn get_active_products(
 
     let current_session = session
         .get_session(&key)
+        .await
         .ok_or_else(|| HttpError::Unauthorized("Session expired or not found".to_string()))?;
 
     if !current_session
@@ -127,6 +129,7 @@ pub async fn get_trashed_products(
 
     let current_session = session
         .get_session(&key)
+        .await
         .ok_or_else(|| HttpError::Unauthorized("Session expired or not found".to_string()))?;
 
     if !current_session
@@ -165,6 +168,7 @@ pub async fn get_product(
 
     let current_session = session
         .get_session(&key)
+        .await
         .ok_or_else(|| HttpError::Unauthorized("Session expired or not found".to_string()))?;
 
     if !current_session
@@ -361,10 +365,8 @@ pub fn product_routes(app_state: Arc<AppState>) -> OpenApiRouter {
         )
         .route_layer(middleware::from_fn(session_middleware))
         .route_layer(middleware::from_fn(auth_middleware))
-        .route_layer(middleware::from_fn(rate_limit_middleware))
         .layer(Extension(app_state.di_container.product_clients.clone()))
         .layer(Extension(app_state.di_container.role_clients.clone()))
-        .layer(Extension(app_state.rate_limit.clone()))
         .layer(Extension(app_state.session.clone()))
         .layer(Extension(app_state.jwt_config.clone()))
 }

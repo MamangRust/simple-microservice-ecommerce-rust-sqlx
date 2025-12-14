@@ -6,55 +6,20 @@ receivers:
       http:
         endpoint: "0.0.0.0:4318"
 
-  prometheus:
-    config:
-      scrape_configs:
-        - job_name: "otel-collector"
-          scrape_interval: 5s
-          static_configs:
-            - targets: ["localhost:8889"]
-        - job_name: "http-apigateway"
-          scrape_interval: 10s
-          static_configs:
-            - targets: ["apigateway:5000"]
-              labels:
-                application: "http-api-gateway"
-        - job_name: "grpc-auth-service"
-          scrape_interval: 10s
-          static_configs:
-            - targets: ["auth-service:8080"]
-              labels:
-                application: "grpc-auth-service"
-        - job_name: "grpc-user-service"
-          scrape_interval: 10s
-          static_configs:
-            - targets: ["user-service:8081"]
-              labels:
-                application: "grpc-user-service"
-
-        - job_name: "grpc-role-service"
-          scrape_interval: 10s
-          static_configs:
-            - targets: ["role-service:8082"]
-              labels:
-                application: "grpc-role-service"
-
-        - job_name: "grpc-product-service"
-          scrape_interval: 10s
-          static_configs:
-            - targets: ["product-service:8083"]
-              labels:
-                application: "grpc-product-service"
-
-        - job_name: "grpc-order-service"
-          scrape_interval: 10s
-          static_configs:
-            - targets: ["order-service:8085"]
-              labels:
-                application: "grpc-order-service"
-
 processors:
   batch:
+    timeout: 10s
+    send_batch_size: 1024
+    send_batch_max_size: 2048
+
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: production
+        action: upsert
 
 exporters:
   otlp:
@@ -64,29 +29,53 @@ exporters:
 
   prometheus:
     endpoint: "0.0.0.0:8889"
+    namespace: "rust_app"
+    const_labels:
+      environment: "production"
     resource_to_telemetry_conversion:
-      enabled: false
+      enabled: true
+    enable_open_metrics: true
+
+  otlphttp/loki:
+    endpoint: "http://loki:3100/otlp"
+    tls:
+      insecure: true
+    timeout: 10s
+
+  debug:
+    verbosity: detailed
+    sampling_initial: 5
+    sampling_thereafter: 200
 
 extensions:
   health_check:
+    endpoint: "0.0.0.0:13133"
   pprof:
+    endpoint: "0.0.0.0:1777"
   zpages:
+    endpoint: "0.0.0.0:55679"
 
 service:
-  extensions: [health_check, pprof, zpages]
+  extensions: [ health_check, pprof, zpages ]
 
   pipelines:
     traces:
-      receivers: [otlp]
-      processors: [batch]
-      exporters: [otlp]
+      receivers: [ otlp ]
+      processors: [ memory_limiter, batch, resource ]
+      exporters: [ otlp ]
 
     metrics:
-      receivers: [otlp, prometheus]
-      processors: [batch]
-      exporters: [prometheus]
+      receivers: [ otlp ]
+      processors: [ memory_limiter, batch, resource ]
+      exporters: [ prometheus ]
 
     logs:
-      receivers: [otlp]
-      processors: [batch]
-      exporters: [otlp]
+      receivers: [ otlp ]
+      processors: [ memory_limiter, batch, resource ]
+      exporters: [ otlphttp/loki ]
+
+  telemetry:
+    logs:
+      level: "info"
+    metrics:
+      level: detailed

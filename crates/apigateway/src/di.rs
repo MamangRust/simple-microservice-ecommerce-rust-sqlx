@@ -1,7 +1,3 @@
-use anyhow::{Context, Result};
-use prometheus_client::registry::Registry;
-use std::sync::Arc;
-
 use crate::{
     abstract_trait::{
         auth::DynAuthGrpcClient, order::DynOrderGrpcClient, product::DynProductGrpcClient,
@@ -12,6 +8,10 @@ use crate::{
         RoleGrpcClientService, UserGrpcClientService,
     },
 };
+use anyhow::{Context, Result};
+use shared::cache::CacheStore;
+use shared::config::RedisPool;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct DependenciesInject {
@@ -35,17 +35,19 @@ impl std::fmt::Debug for DependenciesInject {
 }
 
 impl DependenciesInject {
-    pub fn new(clients: GrpcClients, registry: &mut Registry) -> Result<Self> {
+    pub fn new(clients: GrpcClients, redis: RedisPool) -> Result<Self> {
         let auth_clients: DynAuthGrpcClient = Arc::new(
-            AuthGrpcClientService::new(clients.auth.clone(), registry)
+            AuthGrpcClientService::new(clients.auth.clone())
                 .context("Failed to initialize AuthGrpcClientService")?,
         );
+
+        let cache = Arc::new(CacheStore::new(redis.pool.clone()));
 
         let role_clients: DynRoleGrpcClient = Arc::new(
             RoleGrpcClientService::new(
                 clients.role_query.clone(),
                 clients.role_command.clone(),
-                registry,
+                cache.clone(),
             )
             .context("Failed to initialize RoleGrpcClientService")?,
         );
@@ -54,7 +56,7 @@ impl DependenciesInject {
             UserGrpcClientService::new(
                 clients.user_query.clone(),
                 clients.user_command.clone(),
-                registry,
+                cache.clone(),
             )
             .context("Failed to initialize UserGrpcClientService")?,
         );
@@ -63,7 +65,7 @@ impl DependenciesInject {
             ProductGrpcClientService::new(
                 clients.product_query.clone(),
                 clients.product_command.clone(),
-                registry,
+                cache.clone(),
             )
             .context("Failed to initialize ProductGrpcClientService")?,
         );
@@ -72,7 +74,7 @@ impl DependenciesInject {
             OrderGrpcClientService::new(
                 clients.order_query.clone(),
                 clients.order_command.clone(),
-                registry,
+                cache.clone(),
             )
             .context("Failed to initialize OrderGrpcClientService")?,
         );

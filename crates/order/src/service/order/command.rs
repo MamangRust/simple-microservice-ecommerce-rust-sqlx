@@ -35,7 +35,6 @@ use opentelemetry::{
     global::{self, BoxedTracer},
     trace::{Span, SpanKind, TraceContextExt, Tracer},
 };
-use prometheus_client::registry::Registry;
 use tokio::time::Instant;
 use tonic::Request;
 use tracing::{error, info};
@@ -61,8 +60,8 @@ pub struct OrderCommandServiceDeps {
 }
 
 impl OrderCommandService {
-    pub fn new(deps: OrderCommandServiceDeps, registry: &mut Registry) -> Result<Self> {
-        let metrics = Metrics::new();
+    pub fn new(deps: OrderCommandServiceDeps) -> Result<Self> {
+        let metrics = Metrics::new(global::meter("order-command-service"));
 
         let OrderCommandServiceDeps {
             order_item_command,
@@ -72,17 +71,6 @@ impl OrderCommandService {
             query,
             kafka,
         } = deps;
-
-        registry.register(
-            "order_command_service_request_counter",
-            "Total number of requests to the OrderCommandService",
-            metrics.request_counter.clone(),
-        );
-        registry.register(
-            "order_command_service_request_duration",
-            "Histogram of request durations for the OrderCommandService",
-            metrics.request_duration.clone(),
-        );
 
         Ok(Self {
             order_item_query,

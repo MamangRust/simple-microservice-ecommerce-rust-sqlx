@@ -3,10 +3,9 @@ use crate::{
     service::{command::ProductCommandService, query::ProductQueryService},
 };
 use anyhow::{Context, Result};
-use prometheus_client::registry::Registry;
 use shared::{
     cache::CacheStore,
-    config::{ConnectionPool, RedisClient},
+    config::{ConnectionPool, RedisPool},
 };
 use std::{fmt, sync::Arc};
 
@@ -28,23 +27,22 @@ impl fmt::Debug for DependenciesInject {
 #[derive(Clone)]
 pub struct DependenciesInjectDeps {
     pub pool: ConnectionPool,
-    pub redis: RedisClient,
+    pub redis: RedisPool,
 }
 
 impl DependenciesInject {
-    pub fn new(deps: DependenciesInjectDeps, registry: &mut Registry) -> Result<Self> {
+    pub fn new(deps: DependenciesInjectDeps) -> Result<Self> {
         let DependenciesInjectDeps { pool, redis } = deps;
 
         let product_query_repo = Arc::new(ProductQueryRepository::new(pool.clone()));
         let product_command_repo = Arc::new(ProductCommandRepository::new(pool.clone()));
 
-        let cache = Arc::new(CacheStore::new(redis.client.clone()));
+        let cache = Arc::new(CacheStore::new(redis.pool.clone()));
 
-        let product_query =
-            ProductQueryService::new(product_query_repo.clone(), registry, cache.clone())
-                .context("failed initialize product query")?;
+        let product_query = ProductQueryService::new(product_query_repo.clone(), cache.clone())
+            .context("failed initialize product query")?;
 
-        let product_command = ProductCommandService::new(product_command_repo.clone(), registry)
+        let product_command = ProductCommandService::new(product_command_repo.clone())
             .context("failed initialize product command")?;
 
         Ok(Self {

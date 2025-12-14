@@ -12,6 +12,7 @@ use crate::{
 };
 use anyhow::Result;
 use async_trait::async_trait;
+use chrono::Duration;
 use genproto::user::{
     FindAllUserRequest, FindByIdUserRequest, UpdateUserRequest,
     user_command_service_client::UserCommandServiceClient,
@@ -22,45 +23,37 @@ use opentelemetry::{
     global::{self, BoxedTracer},
     trace::{Span, SpanKind, TraceContextExt, Tracer},
 };
-use prometheus_client::registry::Registry;
+use shared::cache::CacheStore;
 use shared::{
     errors::{AppErrorGrpc, HttpError},
     utils::{MetadataInjector, Method, Metrics, Status as StatusUtils, TracingContext},
 };
+use std::sync::Arc;
 use tokio::time::Instant;
 use tonic::{Request, transport::Channel};
 use tracing::{error, info};
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct UserGrpcClientService {
     query_client: UserQueryServiceClient<Channel>,
     command_client: UserCommandServiceClient<Channel>,
     metrics: Metrics,
+    cache_store: Arc<CacheStore>,
 }
 
 impl UserGrpcClientService {
     pub fn new(
         query_client: UserQueryServiceClient<Channel>,
         command_client: UserCommandServiceClient<Channel>,
-        registry: &mut Registry,
+        cache_store: Arc<CacheStore>,
     ) -> Result<Self> {
-        let metrics = Metrics::new();
-
-        registry.register(
-            "user_service_client_request_counter",
-            "Total number of requests to the UserGrpcClientService",
-            metrics.request_counter.clone(),
-        );
-        registry.register(
-            "user_service_client_duration",
-            "Histogram of request durations for the UserGrpcClientService",
-            metrics.request_duration.clone(),
-        );
+        let metrics = Metrics::new(global::meter("user-client-service"));
 
         Ok(Self {
             query_client,
             command_client,
             metrics,
+            cache_store,
         })
     }
     fn get_tracer(&self) -> BoxedTracer {
@@ -158,9 +151,12 @@ impl UserGrpcClientTrait for UserGrpcClientService {
         &self,
         req: &DomainFindAllUSers,
     ) -> Result<ApiResponsePagination<Vec<UserResponse>>, HttpError> {
+        let page = req.page;
+        let page_size = req.page_size;
+
         info!(
-            "Retrieving all user (page: {}, size: {} search: {})",
-            req.page, req.page_size, req.search
+            "Retrieving all user (page: {page}, size: {page_size} search: {})",
+            req.search
         );
 
         let method = Method::Get;
@@ -169,19 +165,36 @@ impl UserGrpcClientTrait for UserGrpcClientService {
             vec![
                 KeyValue::new("component", "order"),
                 KeyValue::new("operation", "find_all"),
-                KeyValue::new("page", req.page.to_string()),
-                KeyValue::new("page_size", req.page_size.to_string()),
+                KeyValue::new("page", page.to_string()),
+                KeyValue::new("page_size", page_size.to_string()),
                 KeyValue::new("search", req.search.clone()),
             ],
         );
 
         let mut request = Request::new(FindAllUserRequest {
-            page: req.page,
-            page_size: req.page_size,
+            page,
+            page_size,
             search: req.search.clone(),
         });
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
+
+        let cache_key = format!(
+            "user:find_all:page:{page}:size:{page_size}:search:{}",
+            req.search.clone()
+        );
+
+        if let Some(cache) = self
+            .cache_store
+            .get_from_cache::<ApiResponsePagination<Vec<UserResponse>>>(&cache_key)
+            .await
+        {
+            let log_msg = format!("✅ Found {} users in cache", cache.data.len());
+            info!("{log_msg}");
+            self.complete_tracing_success(&tracing_ctx, method, &log_msg)
+                .await;
+            return Ok(cache);
+        }
 
         let response = match self.query_client.clone().find_all(request).await {
             Ok(response) => {
@@ -202,24 +215,31 @@ impl UserGrpcClientTrait for UserGrpcClientService {
 
         let user_len = users.len();
 
-        let reply = ApiResponsePagination {
+        let api_response = ApiResponsePagination {
             status: inner.status,
             message: inner.message,
             data: users,
             pagination: inner.pagination.unwrap_or_default().into(),
         };
 
+        self.cache_store
+            .set_to_cache(&cache_key, &api_response, Duration::minutes(10))
+            .await;
+
         info!("Successfully fetched {user_len} users");
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn find_active(
         &self,
         req: &DomainFindAllUSers,
     ) -> Result<ApiResponsePagination<Vec<UserResponseDeleteAt>>, HttpError> {
+        let page = req.page;
+        let page_size = req.page_size;
+
         info!(
-            "Retrieving all active user (page: {}, size: {} search: {})",
-            req.page, req.page_size, req.search
+            "Retrieving all active user (page: {page}, size: {page_size} search: {})",
+            req.search
         );
 
         let method = Method::Get;
@@ -228,19 +248,36 @@ impl UserGrpcClientTrait for UserGrpcClientService {
             vec![
                 KeyValue::new("component", "user"),
                 KeyValue::new("operation", "find_active"),
-                KeyValue::new("page", req.page.to_string()),
-                KeyValue::new("page_size", req.page_size.to_string()),
+                KeyValue::new("page", page.to_string()),
+                KeyValue::new("page_size", page_size.to_string()),
                 KeyValue::new("search", req.search.clone()),
             ],
         );
 
         let mut request = Request::new(FindAllUserRequest {
-            page: req.page,
-            page_size: req.page_size,
+            page,
+            page_size,
             search: req.search.clone(),
         });
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
+
+        let cache_key = format!(
+            "user:find_active:page:{page}:size:{page_size}:search:{}",
+            req.search.clone()
+        );
+
+        if let Some(cache) = self
+            .cache_store
+            .get_from_cache::<ApiResponsePagination<Vec<UserResponseDeleteAt>>>(&cache_key)
+            .await
+        {
+            let log_msg = format!("✅ Found {} users in cache", cache.data.len());
+            info!("{log_msg}");
+            self.complete_tracing_success(&tracing_ctx, method, &log_msg)
+                .await;
+            return Ok(cache);
+        }
 
         let response = match self.query_client.clone().find_by_active(request).await {
             Ok(response) => {
@@ -265,24 +302,31 @@ impl UserGrpcClientTrait for UserGrpcClientService {
 
         let users_len = users.len();
 
-        let reply = ApiResponsePagination {
+        let api_response = ApiResponsePagination {
             status: inner.status,
             message: inner.message,
             data: users,
             pagination: inner.pagination.unwrap_or_default().into(),
         };
 
+        self.cache_store
+            .set_to_cache(&cache_key, &api_response, Duration::minutes(10))
+            .await;
+
         info!("Successfully fetched {users_len} active users");
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn find_trashed(
         &self,
         req: &DomainFindAllUSers,
     ) -> Result<ApiResponsePagination<Vec<UserResponseDeleteAt>>, HttpError> {
+        let page = req.page;
+        let page_size = req.page_size;
+
         info!(
-            "Retrieving all trashed user (page: {}, size: {} search: {})",
-            req.page, req.page_size, req.search
+            "Retrieving all trashed user (page: {page}, size: {page_size} search: {})",
+            req.search
         );
 
         let method = Method::Get;
@@ -291,19 +335,36 @@ impl UserGrpcClientTrait for UserGrpcClientService {
             vec![
                 KeyValue::new("component", "user"),
                 KeyValue::new("operation", "find_trashed"),
-                KeyValue::new("page", req.page.to_string()),
-                KeyValue::new("page_size", req.page_size.to_string()),
+                KeyValue::new("page", page.to_string()),
+                KeyValue::new("page_size", page_size.to_string()),
                 KeyValue::new("search", req.search.clone()),
             ],
         );
 
         let mut request = Request::new(FindAllUserRequest {
-            page: req.page,
-            page_size: req.page_size,
+            page,
+            page_size,
             search: req.search.clone(),
         });
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
+
+        let cache_key = format!(
+            "user:find_trashed:page:{page}:size:{page_size}:search:{}",
+            req.search.clone()
+        );
+
+        if let Some(cache) = self
+            .cache_store
+            .get_from_cache::<ApiResponsePagination<Vec<UserResponseDeleteAt>>>(&cache_key)
+            .await
+        {
+            let log_msg = format!("✅ Found {} users in cache", cache.data.len());
+            info!("{log_msg}");
+            self.complete_tracing_success(&tracing_ctx, method, &log_msg)
+                .await;
+            return Ok(cache);
+        }
 
         let response = match self.query_client.clone().find_by_trashed(request).await {
             Ok(response) => {
@@ -328,15 +389,19 @@ impl UserGrpcClientTrait for UserGrpcClientService {
 
         let users_len = users.len();
 
-        let reply = ApiResponsePagination {
+        let api_response = ApiResponsePagination {
             status: inner.status,
             message: inner.message,
             data: users,
             pagination: inner.pagination.unwrap_or_default().into(),
         };
 
+        self.cache_store
+            .set_to_cache(&cache_key, &api_response, Duration::minutes(10))
+            .await;
+
         info!("Successfully fetched {users_len} trashed users");
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn find_by_id(&self, id: i32) -> Result<ApiResponse<UserResponse>, HttpError> {
@@ -355,6 +420,19 @@ impl UserGrpcClientTrait for UserGrpcClientService {
         let mut request = Request::new(FindByIdUserRequest { id });
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
+
+        let cache_key = format!("user:find_by_id:{id}");
+
+        if let Some(cache) = self
+            .cache_store
+            .get_from_cache::<ApiResponse<UserResponse>>(&cache_key)
+            .await
+        {
+            info!("✅ Found user with ID {id} in cache");
+            self.complete_tracing_success(&tracing_ctx, method, "User retrieved from cache")
+                .await;
+            return Ok(cache);
+        }
 
         let response = match self.query_client.clone().find_by_id(request).await {
             Ok(response) => {
@@ -381,14 +459,18 @@ impl UserGrpcClientTrait for UserGrpcClientService {
 
         let user_email = domain_user.clone().email;
 
-        let reply = ApiResponse {
+        let api_response = ApiResponse {
             status: inner.status,
             message: inner.message,
             data: domain_user.clone(),
         };
 
+        self.cache_store
+            .set_to_cache(&cache_key, &api_response, Duration::minutes(10))
+            .await;
+
         info!("Successfully fetched user: {user_email}");
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn update_user(
@@ -449,14 +531,14 @@ impl UserGrpcClientTrait for UserGrpcClientService {
 
         let user_email = domain_user.clone().email;
 
-        let reply = ApiResponse {
+        let api_response = ApiResponse {
             status: inner.status,
             message: inner.message,
             data: domain_user,
         };
 
         info!("User {user_email} updated successfully");
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn trash_user(&self, id: i32) -> Result<ApiResponse<UserResponseDeleteAt>, HttpError> {
@@ -503,14 +585,14 @@ impl UserGrpcClientTrait for UserGrpcClientService {
 
         let domain_user: UserResponseDeleteAt = user_data.into();
 
-        let reply = ApiResponse {
+        let api_response = ApiResponse {
             status: inner.status,
             message: inner.message,
             data: domain_user,
         };
 
         info!("User {} soft deleted successfully", id);
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn restore_user(&self, id: i32) -> Result<ApiResponse<UserResponseDeleteAt>, HttpError> {
@@ -553,14 +635,14 @@ impl UserGrpcClientTrait for UserGrpcClientService {
 
         let domain_user: UserResponseDeleteAt = user_data.into();
 
-        let reply = ApiResponse {
+        let api_response = ApiResponse {
             status: inner.status,
             message: inner.message,
             data: domain_user,
         };
 
         info!("User {} restored successfully", id);
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn delete_user(&self, id: i32) -> Result<ApiResponse<()>, HttpError> {
@@ -600,14 +682,14 @@ impl UserGrpcClientTrait for UserGrpcClientService {
 
         let inner = response.into_inner();
 
-        let reply = ApiResponse {
+        let api_response = ApiResponse {
             status: inner.status,
             message: inner.message,
             data: (),
         };
 
         info!("User {} permanently deleted", id);
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn restore_all_user(&self) -> Result<ApiResponse<()>, HttpError> {
@@ -641,14 +723,14 @@ impl UserGrpcClientTrait for UserGrpcClientService {
 
         let inner = response.into_inner();
 
-        let reply = ApiResponse {
+        let api_response = ApiResponse {
             status: inner.status,
             message: inner.message,
             data: (),
         };
 
         info!("All users restored successfully");
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn delete_all_user(&self) -> Result<ApiResponse<()>, HttpError> {
@@ -687,13 +769,13 @@ impl UserGrpcClientTrait for UserGrpcClientService {
 
         let inner = response.into_inner();
 
-        let reply = ApiResponse {
+        let api_response = ApiResponse {
             status: inner.status,
             message: inner.message,
             data: (),
         };
 
         info!("All trashed users permanently deleted");
-        Ok(reply)
+        Ok(api_response)
     }
 }

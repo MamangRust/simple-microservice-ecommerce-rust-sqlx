@@ -1,5 +1,8 @@
-use anyhow::Result;
-use redis::{Client, Connection, RedisResult};
+use anyhow::{Context, Result};
+use deadpool_redis::{
+    Config as DeadpoolRedisConfig, Connection, Pool, PoolError, Runtime, redis::cmd,
+};
+use std::env;
 use tracing::info;
 
 #[derive(Debug, Clone)]
@@ -7,55 +10,88 @@ pub struct RedisConfig {
     pub host: String,
     pub port: u16,
     pub db: u8,
+    pub user: Option<String>,
     pub password: Option<String>,
 }
 
 impl RedisConfig {
-    pub fn new(host: String, port: u16, db: u8, password: Option<String>) -> Self {
+    pub fn new() -> Self {
+        let host = env::var("REDIS_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
+
+        let port = env::var("REDIS_PORT")
+            .ok()
+            .and_then(|v| v.parse::<u16>().ok())
+            .unwrap_or(6379);
+
+        let db = env::var("REDIS_DB")
+            .ok()
+            .and_then(|v| v.parse::<u8>().ok())
+            .unwrap_or(0);
+
+        let user = env::var("REDIS_USER").ok().filter(|v| !v.is_empty());
+
+        let password = env::var("REDIS_PASSWORD").ok().filter(|v| !v.is_empty());
+
         Self {
             host,
             port,
             db,
+            user,
             password,
+        }
+    }
+
+    pub fn url(&self) -> String {
+        match (&self.user, &self.password) {
+            (Some(user), Some(pw)) => {
+                format!(
+                    "redis://{}:{}@{}:{}/{}",
+                    user, pw, self.host, self.port, self.db
+                )
+            }
+            (None, Some(pw)) => {
+                format!("redis://:{}@{}:{}/{}", pw, self.host, self.port, self.db)
+            }
+            _ => {
+                format!("redis://{}:{}/{}", self.host, self.port, self.db)
+            }
         }
     }
 }
 
-#[derive(Clone)]
-pub struct RedisClient {
-    pub client: Client,
+impl Default for RedisConfig{
+    fn default() -> Self {
+        RedisConfig::new()
+    }
 }
 
-impl RedisClient {
+#[derive(Clone)]
+pub struct RedisPool {
+    pub pool: Pool,
+}
+
+impl RedisPool {
     pub fn new(config: &RedisConfig) -> Result<Self> {
-        info!("Creating redis client");
+        info!("Creating redis pool (deadpool-redis)");
 
-        let url = match &config.password {
-            Some(pw) => format!(
-                "redis://:{}@{}:{}/{}",
-                pw, config.host, config.port, config.db
-            ),
-            None => format!("redis://{}:{}/{}", config.host, config.port, config.db),
-        };
+        let pool_cfg = DeadpoolRedisConfig::from_url(config.url());
 
-        let client = Client::open(url)?;
+        let pool = pool_cfg
+            .create_pool(Some(Runtime::Tokio1))
+            .context("failed create redis connection pool")?;
 
-        Ok(Self { client })
+        Ok(Self { pool })
     }
 
-    pub fn get_connection(&self) -> RedisResult<Connection> {
-        self.client.get_connection()
+    pub async fn get_conn(&self) -> Result<Connection, PoolError> {
+        self.pool.get().await
     }
 
-    pub fn ping(&self) -> Result<()> {
-        let mut conn = self.get_connection()?;
-
-        info!("Pinging redis");
-
-        let _: () = redis::cmd("PING").query(&mut conn)?;
-
-        info!("Pinged redis");
-
+    pub async fn ping(&self) -> Result<(), PoolError> {
+        let mut conn = self.get_conn().await?;
+        info!("Pinging redis (deadpool-redis)");
+        cmd("PING").query_async::<()>(&mut conn).await?;
+        info!("Pinged redis (deadpool-redis)");
         Ok(())
     }
 }

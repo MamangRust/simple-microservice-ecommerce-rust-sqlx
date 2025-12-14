@@ -7,13 +7,7 @@ mod user;
 
 use crate::state::AppState;
 use anyhow::Result;
-use axum::body::Body;
-use axum::extract::{DefaultBodyLimit, State};
-use axum::http::StatusCode;
-use axum::http::header::CONTENT_TYPE;
-use axum::response::{IntoResponse, Response};
-use axum::routing::get;
-use prometheus_client::encoding::text::encode;
+use axum::extract::DefaultBodyLimit;
 use shared::utils::shutdown_signal;
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -124,28 +118,6 @@ impl Modify for SecurityAddon {
     }
 }
 
-pub async fn metrics_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let mut buffer = String::new();
-
-    let registry = state.registry.clone();
-
-    if let Err(e) = encode(&mut buffer, &registry) {
-        return Response::builder()
-            .status(StatusCode::INTERNAL_SERVER_ERROR)
-            .body(Body::from(format!("Failed to encode metrics: {e}")))
-            .unwrap();
-    }
-
-    Response::builder()
-        .status(StatusCode::OK)
-        .header(
-            CONTENT_TYPE,
-            "application/openmetrics-text; version=1.0.0; charset=utf-8",
-        )
-        .body(Body::from(buffer))
-        .unwrap()
-}
-
 pub struct AppRouter;
 
 impl AppRouter {
@@ -153,7 +125,6 @@ impl AppRouter {
         let shared_state = Arc::new(app_state);
 
         let api_router = OpenApiRouter::with_openapi(ApiDoc::openapi())
-            .route("/metrics", get(metrics_handler))
             .with_state(shared_state.clone())
             .merge(auth_routes(shared_state.clone()))
             .merge(user_routes(shared_state.clone()))

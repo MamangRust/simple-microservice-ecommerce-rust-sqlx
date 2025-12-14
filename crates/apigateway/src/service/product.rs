@@ -14,6 +14,7 @@ use crate::{
 };
 use anyhow::Result;
 use async_trait::async_trait;
+use chrono::Duration;
 use genproto::product::{
     CreateProductRequest, FindAllProductRequest, FindByIdProductRequest, UpdateProductRequest,
     product_command_service_client::ProductCommandServiceClient,
@@ -24,44 +25,37 @@ use opentelemetry::{
     global::{self, BoxedTracer},
     trace::{Span, SpanKind, TraceContextExt, Tracer},
 };
-use prometheus_client::registry::Registry;
+use shared::cache::CacheStore;
 use shared::{
     errors::{AppErrorGrpc, HttpError},
     utils::{MetadataInjector, Method, Metrics, Status as StatusUtils, TracingContext},
 };
+use std::sync::Arc;
 use tokio::time::Instant;
 use tonic::{Request, transport::Channel};
 use tracing::{error, info};
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ProductGrpcClientService {
     query_client: ProductQueryServiceClient<Channel>,
     command_client: ProductCommandServiceClient<Channel>,
     metrics: Metrics,
+    cache_store: Arc<CacheStore>,
 }
 
 impl ProductGrpcClientService {
     pub fn new(
         query_client: ProductQueryServiceClient<Channel>,
         command_client: ProductCommandServiceClient<Channel>,
-        registry: &mut Registry,
+        cache_store: Arc<CacheStore>,
     ) -> Result<Self> {
-        let metrics = Metrics::new();
+        let metrics = Metrics::new(global::meter("product-service-client"));
 
-        registry.register(
-            "product_service_client_request_counter",
-            "Total number of requests to the ProductGrpcClientService",
-            metrics.request_counter.clone(),
-        );
-        registry.register(
-            "product_service_client_request_duration",
-            "Histogram of request durations for the ProductGrpcClientService",
-            metrics.request_duration.clone(),
-        );
         Ok(Self {
             query_client,
             command_client,
             metrics,
+            cache_store,
         })
     }
 
@@ -160,9 +154,12 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
         &self,
         req: &DomainFindAllProducts,
     ) -> Result<ApiResponsePagination<Vec<ProductResponse>>, HttpError> {
+        let page = req.page;
+        let page_size = req.page_size;
+
         info!(
-            "Retrieving all product (page: {}, size: {} search: {})",
-            req.page, req.page_size, req.search
+            "Retrieving all product (page: {page}, size: {page_size} search: {})",
+            req.search
         );
 
         let method = Method::Get;
@@ -171,19 +168,36 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
             vec![
                 KeyValue::new("component", "product"),
                 KeyValue::new("operation", "find_all"),
-                KeyValue::new("page", req.page.to_string()),
-                KeyValue::new("page_size", req.page_size.to_string()),
+                KeyValue::new("page", page.to_string()),
+                KeyValue::new("page_size", page_size.to_string()),
                 KeyValue::new("search", req.search.clone()),
             ],
         );
 
         let mut request = Request::new(FindAllProductRequest {
-            page: req.page,
-            page_size: req.page_size,
+            page,
+            page_size,
             search: req.search.clone(),
         });
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
+
+        let cache_key = format!(
+            "product:find_all:page:{page}:size:{page_size}:search:{}",
+            req.search.clone(),
+        );
+
+        if let Some(cache) = self
+            .cache_store
+            .get_from_cache::<ApiResponsePagination<Vec<ProductResponse>>>(&cache_key)
+            .await
+        {
+            let log_msg = format!("✅ Found {} roles in cache", cache.data.len());
+            info!("{log_msg}");
+            self.complete_tracing_success(&tracing_ctx, method, &log_msg)
+                .await;
+            return Ok(cache);
+        }
 
         let response = match self.query_client.clone().find_all(request).await {
             Ok(response) => {
@@ -213,24 +227,31 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
 
         let product_len = products.len();
 
-        let reply = ApiResponsePagination {
+        let api_response = ApiResponsePagination {
             status: inner.status,
             message: inner.message,
             data: products,
             pagination: inner.pagination.unwrap_or_default().into(),
         };
 
+        self.cache_store
+            .set_to_cache(&cache_key, &api_response, Duration::minutes(30))
+            .await;
+
         info!("Successfully fetched {product_len} Products");
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn find_active(
         &self,
         req: &DomainFindAllProducts,
     ) -> Result<ApiResponsePagination<Vec<ProductResponseDeleteAt>>, HttpError> {
+        let page = req.page;
+        let page_size = req.page_size;
+
         info!(
-            "Retrieving all product active (page: {}, size: {} search: {})",
-            req.page, req.page_size, req.search
+            "Retrieving all product active (page: {page}, size: {page_size} search: {})",
+            req.search
         );
 
         let method = Method::Get;
@@ -239,19 +260,36 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
             vec![
                 KeyValue::new("component", "product"),
                 KeyValue::new("operation", "find_active"),
-                KeyValue::new("page", req.page.to_string()),
-                KeyValue::new("page_size", req.page_size.to_string()),
+                KeyValue::new("page", page.to_string()),
+                KeyValue::new("page_size", page_size.to_string()),
                 KeyValue::new("search", req.search.clone()),
             ],
         );
 
         let mut request = Request::new(FindAllProductRequest {
-            page: req.page,
-            page_size: req.page_size,
+            page,
+            page_size,
             search: req.search.clone(),
         });
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
+
+        let cache_key = format!(
+            "product:find_active:page:{page}:size:{page_size}:search:{}",
+            req.search.clone()
+        );
+
+        if let Some(cache) = self
+            .cache_store
+            .get_from_cache::<ApiResponsePagination<Vec<ProductResponseDeleteAt>>>(&cache_key)
+            .await
+        {
+            let log_msg = format!("✅ Found {} active roles in cache", cache.data.len());
+            info!("{log_msg}");
+            self.complete_tracing_success(&tracing_ctx, method, &log_msg)
+                .await;
+            return Ok(cache);
+        }
 
         let response = match self.query_client.clone().find_by_active(request).await {
             Ok(response) => {
@@ -282,24 +320,31 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
 
         let products_len = products.len();
 
-        let reply = ApiResponsePagination {
+        let api_response = ApiResponsePagination {
             status: inner.status,
             message: inner.message,
             data: products,
             pagination: inner.pagination.unwrap_or_default().into(),
         };
 
+        self.cache_store
+            .set_to_cache(&cache_key, &api_response, Duration::minutes(30))
+            .await;
+
         info!("Successfully fetched {products_len} active Products");
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn find_trashed(
         &self,
         req: &DomainFindAllProducts,
     ) -> Result<ApiResponsePagination<Vec<ProductResponseDeleteAt>>, HttpError> {
+        let page = req.page;
+        let page_size = req.page_size;
+
         info!(
-            "Retrieving all product trashed (page: {}, size: {} search: {})",
-            req.page, req.page_size, req.search
+            "Retrieving all product trashed (page: {page}, size: {page_size} search: {})",
+            req.search
         );
 
         let method = Method::Get;
@@ -308,19 +353,36 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
             vec![
                 KeyValue::new("component", "product"),
                 KeyValue::new("operation", "find_trashed"),
-                KeyValue::new("page", req.page.to_string()),
-                KeyValue::new("page_size", req.page_size.to_string()),
+                KeyValue::new("page", page.to_string()),
+                KeyValue::new("page_size", page_size.to_string()),
                 KeyValue::new("search", req.search.clone()),
             ],
         );
 
         let mut request = Request::new(FindAllProductRequest {
-            page: req.page,
-            page_size: req.page_size,
+            page,
+            page_size,
             search: req.search.clone(),
         });
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
+
+        let cache_key = format!(
+            "product:find_trashed:page:{page}:size:{page_size}:search:{:?}",
+            req.search.clone()
+        );
+
+        if let Some(cache) = self
+            .cache_store
+            .get_from_cache::<ApiResponsePagination<Vec<ProductResponseDeleteAt>>>(&cache_key)
+            .await
+        {
+            let log_msg = format!("✅ Found {} trashed roles in cache", cache.data.len());
+            info!("{log_msg}");
+            self.complete_tracing_success(&tracing_ctx, method, &log_msg)
+                .await;
+            return Ok(cache);
+        }
 
         let response = match self.query_client.clone().find_by_trashed(request).await {
             Ok(response) => {
@@ -347,15 +409,19 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
 
         let products_len = products.len();
 
-        let reply = ApiResponsePagination {
+        let api_response = ApiResponsePagination {
             status: inner.status,
             message: inner.message,
             data: products,
             pagination: inner.pagination.unwrap_or_default().into(),
         };
 
+        self.cache_store
+            .set_to_cache(&cache_key, &api_response, Duration::minutes(30))
+            .await;
+
         info!("Successfully fetched {products_len} trashed Products");
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn find_by_id(&self, id: i32) -> Result<ApiResponse<ProductResponse>, HttpError> {
@@ -374,6 +440,19 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
         let mut request = Request::new(FindByIdProductRequest { id });
 
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
+
+        let cache_key = format!("product:find_by_id:id:{id}");
+
+        if let Some(cache) = self
+            .cache_store
+            .get_from_cache::<ApiResponse<ProductResponse>>(&cache_key)
+            .await
+        {
+            info!("✅ Found role in cache");
+            self.complete_tracing_success(&tracing_ctx, method, "Role retrieved from cache")
+                .await;
+            return Ok(cache);
+        }
 
         let response = match self.query_client.clone().find_by_id(request).await {
             Ok(response) => {
@@ -409,14 +488,18 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
 
         let product_name = domain_product.clone().name;
 
-        let reply = ApiResponse {
+        let api_response = ApiResponse {
             status: inner.status,
             message: inner.message,
             data: domain_product.clone(),
         };
 
+        self.cache_store
+            .set_to_cache(&cache_key, &api_response, Duration::minutes(30))
+            .await;
+
         info!("Successfully fetched Product: {product_name}");
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn create_product(
@@ -473,14 +556,14 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
 
         let domain_product: ProductResponse = product_data.into();
 
-        let reply = ApiResponse {
+        let api_response = ApiResponse {
             status: inner.status,
             message: inner.message,
             data: domain_product,
         };
 
         info!("Product {} created successfully", req.name);
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn update_product(
@@ -545,14 +628,14 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
 
         let product_name = domain_product.clone().name;
 
-        let reply = ApiResponse {
+        let api_response = ApiResponse {
             status: inner.status,
             message: inner.message,
             data: domain_product,
         };
 
         info!("Product {product_name} updated successfully");
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn trash_product(
@@ -603,14 +686,14 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
 
         let domain_product: ProductResponseDeleteAt = product_data.into();
 
-        let reply = ApiResponse {
+        let api_response = ApiResponse {
             status: inner.status,
             message: inner.message,
             data: domain_product,
         };
 
         info!("Product {} soft deleted successfully", id);
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn restore_product(
@@ -661,14 +744,14 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
 
         let domain_product: ProductResponseDeleteAt = product_data.into();
 
-        let reply = ApiResponse {
+        let api_response = ApiResponse {
             status: inner.status,
             message: inner.message,
             data: domain_product,
         };
 
         info!("Product {} restored successfully", id);
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn delete_product(&self, id: i32) -> Result<ApiResponse<()>, HttpError> {
@@ -713,14 +796,14 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
 
         let inner = response.into_inner();
 
-        let reply = ApiResponse {
+        let api_response = ApiResponse {
             status: inner.status,
             message: inner.message,
             data: (),
         };
 
         info!("Product {} permanently deleted", id);
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn restore_all_product(&self) -> Result<ApiResponse<()>, HttpError> {
@@ -764,14 +847,14 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
 
         let inner = response.into_inner();
 
-        let reply = ApiResponse {
+        let api_response = ApiResponse {
             status: inner.status,
             message: inner.message,
             data: (),
         };
 
         info!("All Products restored successfully");
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn delete_all_product(&self) -> Result<ApiResponse<()>, HttpError> {
@@ -819,13 +902,13 @@ impl ProductGrpcClientTrait for ProductGrpcClientService {
 
         let inner = response.into_inner();
 
-        let reply = ApiResponse {
+        let api_response = ApiResponse {
             status: inner.status,
             message: inner.message,
             data: (),
         };
 
         info!("All trashed Products permanently deleted");
-        Ok(reply)
+        Ok(api_response)
     }
 }

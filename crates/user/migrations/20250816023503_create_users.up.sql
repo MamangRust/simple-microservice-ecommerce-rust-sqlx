@@ -13,12 +13,18 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- Indeks
-CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
+CREATE INDEX IF NOT EXISTS idx_users_active_email ON users (email)
+WHERE
+    deleted_at IS NULL;
 
-CREATE INDEX IF NOT EXISTS idx_users_firstname ON users (firstname);
+CREATE INDEX IF NOT EXISTS idx_users_active_created_at ON users (created_at DESC)
+WHERE
+    deleted_at IS NULL;
 
-CREATE INDEX IF NOT EXISTS idx_users_lastname ON users (lastname);
+CREATE INDEX IF NOT EXISTS idx_users_active_firstname_lastname ON users (firstname, lastname)
+WHERE
+    deleted_at IS NULL;
 
-CREATE INDEX IF NOT EXISTS idx_users_firstname_lastname ON users (firstname, lastname);
-
-CREATE INDEX IF NOT EXISTS idx_users_created_at ON users (created_at);
+CREATE INDEX IF NOT EXISTS idx_users_trashed_created_at ON users (created_at DESC)
+WHERE
+    deleted_at IS NOT NULL;

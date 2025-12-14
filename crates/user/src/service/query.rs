@@ -17,7 +17,6 @@ use opentelemetry::{
     global::{self, BoxedTracer},
     trace::{Span, SpanKind, TraceContextExt, Tracer},
 };
-use prometheus_client::registry::Registry;
 use shared::{
     cache::CacheStore,
     errors::ServiceError,
@@ -36,23 +35,8 @@ pub struct UserQueryService {
 }
 
 impl UserQueryService {
-    pub fn new(
-        query: DynUserQueryRepository,
-        registry: &mut Registry,
-        cache_store: Arc<CacheStore>,
-    ) -> Result<Self> {
-        let metrics = Metrics::new();
-
-        registry.register(
-            "user_query_service_request_counter",
-            "Total number of requests to the UserQueryService",
-            metrics.request_counter.clone(),
-        );
-        registry.register(
-            "user_query_service_request_duration",
-            "Histogram of request durations for the UserQueryService",
-            metrics.request_duration.clone(),
-        );
+    pub fn new(query: DynUserQueryRepository, cache_store: Arc<CacheStore>) -> Result<Self> {
+        let metrics = Metrics::new(global::meter("user-query-service"));
 
         Ok(Self {
             query,
@@ -190,6 +174,7 @@ impl UserQueryServiceTrait for UserQueryService {
         if let Some(cache) = self
             .cache_store
             .get_from_cache::<ApiResponsePagination<Vec<UserResponse>>>(&cache_key)
+            .await
         {
             let log_msg = format!("✅ Found {} users in cache", cache.data.len());
             info!("{log_msg}");
@@ -239,7 +224,8 @@ impl UserQueryServiceTrait for UserQueryService {
         info!("✅ Found {} users (total: {total})", response.data.len());
 
         self.cache_store
-            .set_to_cache(&cache_key, &response.clone(), Duration::minutes(5));
+            .set_to_cache(&cache_key, &response.clone(), Duration::minutes(5))
+            .await;
 
         Ok(response)
     }
@@ -283,6 +269,7 @@ impl UserQueryServiceTrait for UserQueryService {
         if let Some(cache) = self
             .cache_store
             .get_from_cache::<ApiResponsePagination<Vec<UserResponseDeleteAt>>>(&cache_key)
+            .await
         {
             let log_msg = format!("✅ Found {} active users in cache", cache.data.len());
             info!("{log_msg}");
@@ -331,7 +318,8 @@ impl UserQueryServiceTrait for UserQueryService {
         };
 
         self.cache_store
-            .set_to_cache(&cache_key, &response.clone(), Duration::minutes(5));
+            .set_to_cache(&cache_key, &response.clone(), Duration::minutes(5))
+            .await;
 
         info!(
             "✅ Found {} active users (total: {total})",
@@ -380,6 +368,7 @@ impl UserQueryServiceTrait for UserQueryService {
         if let Some(cache) = self
             .cache_store
             .get_from_cache::<ApiResponsePagination<Vec<UserResponseDeleteAt>>>(&cache_key)
+            .await
         {
             let log_msg = format!("✅ Found {} trashed users in cache", cache.data.len());
             info!("{}", log_msg);
@@ -428,7 +417,8 @@ impl UserQueryServiceTrait for UserQueryService {
         };
 
         self.cache_store
-            .set_to_cache(&cache_key, &response.clone(), Duration::minutes(5));
+            .set_to_cache(&cache_key, &response.clone(), Duration::minutes(5))
+            .await;
 
         info!(
             "✅ Found {} trashed users (total: {total})",
@@ -454,6 +444,7 @@ impl UserQueryServiceTrait for UserQueryService {
         if let Some(cache) = self
             .cache_store
             .get_from_cache::<ApiResponse<UserResponse>>(&cache_key)
+            .await
         {
             info!("✅ Found user in cache");
             self.complete_tracing_success(&tracing_ctx, method, "User retrieved from cache")
@@ -487,7 +478,8 @@ impl UserQueryServiceTrait for UserQueryService {
         };
 
         self.cache_store
-            .set_to_cache(&cache_key, &response.clone(), Duration::minutes(5));
+            .set_to_cache(&cache_key, &response.clone(), Duration::minutes(5))
+            .await;
 
         info!("✅ Found user: '{}' (ID: {id})", response.data.email);
 
@@ -512,6 +504,7 @@ impl UserQueryServiceTrait for UserQueryService {
         if let Some(cache) = self
             .cache_store
             .get_from_cache::<ApiResponse<UserResponse>>(&cache_key)
+            .await
         {
             info!("✅ Found user in cache (email)");
             self.complete_tracing_success(&tracing_ctx, method, "User from cache")
@@ -542,7 +535,8 @@ impl UserQueryServiceTrait for UserQueryService {
         };
 
         self.cache_store
-            .set_to_cache(&cache_key, &response.clone(), Duration::minutes(5));
+            .set_to_cache(&cache_key, &response.clone(), Duration::minutes(5))
+            .await;
 
         info!("📧 User found: {}", response.data.email);
 
@@ -569,6 +563,7 @@ impl UserQueryServiceTrait for UserQueryService {
         if let Some(cache) = self
             .cache_store
             .get_from_cache::<ApiResponse<UserResponseWithPassword>>(&cache_key)
+            .await
         {
             info!("✅ Found verified user in cache");
             self.complete_tracing_success(&tracing_ctx, method, "Verified user from cache")
@@ -599,7 +594,8 @@ impl UserQueryServiceTrait for UserQueryService {
         };
 
         self.cache_store
-            .set_to_cache(&cache_key, &response.clone(), Duration::minutes(5));
+            .set_to_cache(&cache_key, &response.clone(), Duration::minutes(5))
+            .await;
 
         info!("🔐 Verified user found: {}", response.data.email);
 
@@ -626,6 +622,7 @@ impl UserQueryServiceTrait for UserQueryService {
         if let Some(cache) = self
             .cache_store
             .get_from_cache::<ApiResponse<UserResponse>>(&cache_key)
+            .await
         {
             info!("✅ Found user in cache (verification_code)");
             self.complete_tracing_success(&tracing_ctx, method, "User from cache")
@@ -656,7 +653,8 @@ impl UserQueryServiceTrait for UserQueryService {
         };
 
         self.cache_store
-            .set_to_cache(&cache_key, &response.clone(), Duration::minutes(5));
+            .set_to_cache(&cache_key, &response.clone(), Duration::minutes(5))
+            .await;
 
         info!("📨 User found: {}", response.data.email);
 

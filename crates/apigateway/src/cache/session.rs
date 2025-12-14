@@ -3,27 +3,27 @@ use crate::{
 };
 use async_trait::async_trait;
 use chrono::Duration;
-use redis::{Commands, Connection};
+use deadpool_redis::{Connection, Pool, redis::AsyncCommands};
 use std::sync::Arc;
 use tracing::{debug, error};
 
 #[derive(Clone)]
 pub struct SessionStore {
-    pub redis: Arc<redis::Client>,
+    pub pool: Arc<Pool>,
 }
 
 impl SessionStore {
-    pub fn new(redis: redis::Client) -> Self {
+    pub fn new(pool: Pool) -> Self {
         Self {
-            redis: Arc::new(redis),
+            pool: Arc::new(pool),
         }
     }
 
-    fn get_conn(&self) -> Option<Connection> {
-        match self.redis.get_connection() {
+    async fn get_conn(&self) -> Option<Connection> {
+        match self.pool.get().await {
             Ok(conn) => Some(conn),
             Err(e) => {
-                error!("Failed to get Redis connection: {:?}", e);
+                error!("Failed to get Redis connection from pool: {:?}", e);
                 None
             }
         }
@@ -32,7 +32,7 @@ impl SessionStore {
 
 #[async_trait]
 impl SessionLimitMiddlewareTrait for SessionStore {
-    fn create_session(&self, session_id: &str, session: &Session, ttl: Duration) -> bool {
+    async fn create_session(&self, session_id: &str, session: &Session, ttl: Duration) -> bool {
         let json_data = match serde_json::to_string(session) {
             Ok(json) => json,
             Err(e) => {
@@ -41,17 +41,10 @@ impl SessionLimitMiddlewareTrait for SessionStore {
             }
         };
 
-        let conn = self.get_conn();
-        if let Some(mut conn) = conn {
-            let result: redis::RedisResult<()> = redis::pipe()
-                .cmd("SET")
-                .arg(session_id)
-                .arg(&json_data)
-                .ignore()
-                .cmd("EXPIRE")
-                .arg(session_id)
-                .arg(ttl.num_seconds() as usize)
-                .query(&mut conn);
+        if let Some(mut conn) = self.get_conn().await {
+            let result: Result<(), _> = conn
+                .set_ex(session_id, &json_data, ttl.num_seconds() as u64)
+                .await;
 
             match result {
                 Ok(_) => {
@@ -68,9 +61,9 @@ impl SessionLimitMiddlewareTrait for SessionStore {
         }
     }
 
-    fn get_session(&self, session_id: &str) -> Option<Session> {
-        let mut conn = self.get_conn()?;
-        let result: redis::RedisResult<Option<String>> = conn.get(session_id);
+    async fn get_session(&self, session_id: &str) -> Option<Session> {
+        let mut conn = self.get_conn().await?;
+        let result: Result<Option<String>, _> = conn.get(session_id).await;
 
         match result {
             Ok(Some(data)) => match serde_json::from_str::<Session>(&data) {
@@ -94,32 +87,36 @@ impl SessionLimitMiddlewareTrait for SessionStore {
         }
     }
 
-    fn delete_session(&self, session_id: &str) -> bool {
-        if let Some(mut conn) = self.get_conn() {
-            if let Err(e) = redis::cmd("DEL").arg(session_id).query::<()>(&mut conn) {
-                error!("Failed to delete session {}: {:?}", session_id, e);
-                false
-            } else {
-                debug!("Session deleted: {}", session_id);
-                true
+    async fn delete_session(&self, session_id: &str) -> bool {
+        if let Some(mut conn) = self.get_conn().await {
+            let result: Result<(), _> = conn.del(session_id).await;
+            match result {
+                Ok(_) => {
+                    debug!("Session deleted: {}", session_id);
+                    true
+                }
+                Err(e) => {
+                    error!("Failed to delete session {}: {:?}", session_id, e);
+                    false
+                }
             }
         } else {
             false
         }
     }
 
-    fn refresh_session(&self, session_id: &str, ttl: Duration) -> bool {
-        if let Some(mut conn) = self.get_conn() {
-            if let Err(e) = redis::cmd("EXPIRE")
-                .arg(session_id)
-                .arg(ttl.num_seconds() as usize)
-                .query::<()>(&mut conn)
-            {
-                error!("Failed to refresh session TTL {}: {:?}", session_id, e);
-                false
-            } else {
-                debug!("Session TTL refreshed for session_id: {}", session_id);
-                true
+    async fn refresh_session(&self, session_id: &str, ttl: Duration) -> bool {
+        if let Some(mut conn) = self.get_conn().await {
+            let result: Result<bool, _> = conn.expire(session_id, ttl.num_seconds()).await;
+            match result {
+                Ok(_) => {
+                    debug!("Session TTL refreshed for session_id: {}", session_id);
+                    true
+                }
+                Err(e) => {
+                    error!("Failed to refresh session TTL {}: {:?}", session_id, e);
+                    false
+                }
             }
         } else {
             false

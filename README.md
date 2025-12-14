@@ -68,3 +68,5 @@ The architecture consists of several microservices that communicate with each ot
 ## Preview Grafana
 
 ![Usage Memory](./images/memory.png)
+![Loki](./images/loki.png)
+![Jaeger](./images/jaeger.png)

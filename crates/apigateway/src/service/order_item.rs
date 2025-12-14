@@ -10,6 +10,7 @@ use crate::{
 };
 use anyhow::Result;
 use async_trait::async_trait;
+use chrono::Duration;
 use genproto::order_item::{
     FindAllOrderItemRequest, FindByIdOrderItemRequest,
     order_item_service_client::OrderItemServiceClient,
@@ -19,40 +20,35 @@ use opentelemetry::{
     global::{self, BoxedTracer},
     trace::{Span, SpanKind, TraceContextExt, Tracer},
 };
-use prometheus_client::registry::Registry;
+use shared::cache::CacheStore;
 use shared::{
     errors::{AppErrorGrpc, HttpError},
     utils::{MetadataInjector, Method, Metrics, Status as StatusUtils, TracingContext},
 };
+use std::sync::Arc;
 use tokio::time::Instant;
 use tonic::{Request, transport::Channel};
 use tracing::{error, info};
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct OrderItemGrpcClientService {
     client: OrderItemServiceClient<Channel>,
     metrics: Metrics,
+    cache_store: Arc<CacheStore>,
 }
 
 impl OrderItemGrpcClientService {
     pub async fn new(
         client: OrderItemServiceClient<Channel>,
-        registry: &mut Registry,
+        cache_store: Arc<CacheStore>,
     ) -> Result<Self> {
-        let metrics = Metrics::new();
+        let metrics = Metrics::new(global::meter("order-item-client-service"));
 
-        registry.register(
-            "order_item_service_client_request_counter",
-            "Total number of requests to the OrderItemGrpcClientService",
-            metrics.request_counter.clone(),
-        );
-        registry.register(
-            "order_item_service_client_duration",
-            "Histogram of request durations for the OrderItemGrpcClientService",
-            metrics.request_duration.clone(),
-        );
-
-        Ok(Self { client, metrics })
+        Ok(Self {
+            client,
+            metrics,
+            cache_store,
+        })
     }
     fn get_tracer(&self) -> BoxedTracer {
         global::tracer("order_item-client-service")
@@ -149,9 +145,12 @@ impl OrderItemGrpcClientTrait for OrderItemGrpcClientService {
         &self,
         req: &FindAllOrderItems,
     ) -> Result<ApiResponsePagination<Vec<OrderItemResponse>>, HttpError> {
+        let page = req.page;
+        let page_size = req.page_size;
+
         info!(
-            "Retrieving all order items (page: {}, size: {}, search: {})",
-            req.page, req.page_size, req.search
+            "Retrieving all order items (page: {page}, size: {page_size}, search: {})",
+            req.search
         );
 
         let method = Method::Get;
@@ -160,18 +159,35 @@ impl OrderItemGrpcClientTrait for OrderItemGrpcClientService {
             vec![
                 KeyValue::new("component", "order_item"),
                 KeyValue::new("operation", "find_all"),
-                KeyValue::new("page", req.page.to_string()),
-                KeyValue::new("page_size", req.page_size.to_string()),
+                KeyValue::new("page", page.to_string()),
+                KeyValue::new("page_size", page_size.to_string()),
                 KeyValue::new("search", req.search.clone()),
             ],
         );
 
         let mut request = Request::new(FindAllOrderItemRequest {
-            page: req.page,
-            page_size: req.page_size,
+            page,
+            page_size,
             search: req.search.clone(),
         });
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
+
+        let cache_key = format!(
+            "order_item:find_all:page:{page}:size:{page_size}:search:{}",
+            req.search.clone()
+        );
+
+        if let Some(cache) = self
+            .cache_store
+            .get_from_cache::<ApiResponsePagination<Vec<OrderItemResponse>>>(&cache_key)
+            .await
+        {
+            let log_msg = format!("✅ Found {} active roles in cache", cache.data.len());
+            info!("{log_msg}");
+            self.complete_tracing_success(&tracing_ctx, method, &log_msg)
+                .await;
+            return Ok(cache);
+        }
 
         let response = match self.client.clone().find_all(request).await {
             Ok(resp) => {
@@ -199,24 +215,28 @@ impl OrderItemGrpcClientTrait for OrderItemGrpcClientService {
         let order_items: Vec<OrderItemResponse> = inner.data.into_iter().map(Into::into).collect();
         let order_item_len = order_items.len();
 
-        let reply = ApiResponsePagination {
+        let api_response = ApiResponsePagination {
             status: inner.status,
             message: inner.message,
             data: order_items,
             pagination: inner.pagination.unwrap_or_default().into(),
         };
 
+        self.cache_store
+            .set_to_cache(&cache_key, &api_response, Duration::minutes(30))
+            .await;
+
         info!("Successfully fetched {order_item_len} Order Items");
-        Ok(reply)
+        Ok(api_response)
     }
     async fn find_by_active(
         &self,
         req: &FindAllOrderItems,
     ) -> Result<ApiResponsePagination<Vec<OrderItemResponseDeleteAt>>, HttpError> {
-        info!(
-            "Retrieving active order items (page: {}, size: {})",
-            req.page, req.page_size
-        );
+        let page = req.page;
+        let page_size = req.page_size;
+
+        info!("Retrieving active order items (page: {page}, size: {page_size})",);
 
         let method = Method::Get;
         let tracing_ctx = self.start_tracing(
@@ -224,17 +244,34 @@ impl OrderItemGrpcClientTrait for OrderItemGrpcClientService {
             vec![
                 KeyValue::new("component", "order_item"),
                 KeyValue::new("operation", "find_by_active"),
-                KeyValue::new("page", req.page.to_string()),
-                KeyValue::new("page_size", req.page_size.to_string()),
+                KeyValue::new("page", page.to_string()),
+                KeyValue::new("page_size", page_size.to_string()),
             ],
         );
 
         let mut request = Request::new(FindAllOrderItemRequest {
-            page: req.page,
-            page_size: req.page_size,
+            page,
+            page_size,
             search: req.search.clone(),
         });
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
+
+        let cache_key = format!(
+            "order:find_active:page:{page}:size:{page_size}:search:{}",
+            req.search.clone()
+        );
+
+        if let Some(cache) = self
+            .cache_store
+            .get_from_cache::<ApiResponsePagination<Vec<OrderItemResponseDeleteAt>>>(&cache_key)
+            .await
+        {
+            let log_msg = format!("✅ Found {} active roles in cache", cache.data.len());
+            info!("{log_msg}");
+            self.complete_tracing_success(&tracing_ctx, method, &log_msg)
+                .await;
+            return Ok(cache);
+        }
 
         let response = match self.client.clone().find_by_active(request).await {
             Ok(resp) => {
@@ -263,25 +300,29 @@ impl OrderItemGrpcClientTrait for OrderItemGrpcClientService {
             inner.data.into_iter().map(Into::into).collect();
         let order_item_len = order_items.len();
 
-        let reply = ApiResponsePagination {
+        let api_response = ApiResponsePagination {
             status: inner.status,
             message: inner.message,
             data: order_items,
             pagination: inner.pagination.unwrap_or_default().into(),
         };
 
+        self.cache_store
+            .set_to_cache(&cache_key, &api_response, Duration::minutes(30))
+            .await;
+
         info!("Successfully fetched {order_item_len} active Order Items");
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn find_by_trashed(
         &self,
         req: &FindAllOrderItems,
     ) -> Result<ApiResponsePagination<Vec<OrderItemResponseDeleteAt>>, HttpError> {
-        info!(
-            "Retrieving trashed order items (page: {}, size: {})",
-            req.page, req.page_size
-        );
+        let page = req.page;
+        let page_size = req.page_size;
+
+        info!("Retrieving trashed order items (page: {page}, size: {page_size})",);
 
         let method = Method::Get;
         let tracing_ctx = self.start_tracing(
@@ -289,17 +330,34 @@ impl OrderItemGrpcClientTrait for OrderItemGrpcClientService {
             vec![
                 KeyValue::new("component", "order_item"),
                 KeyValue::new("operation", "find_by_trashed"),
-                KeyValue::new("page", req.page.to_string()),
-                KeyValue::new("page_size", req.page_size.to_string()),
+                KeyValue::new("page", page.to_string()),
+                KeyValue::new("page_size", page_size.to_string()),
             ],
         );
 
         let mut request = Request::new(FindAllOrderItemRequest {
-            page: req.page,
-            page_size: req.page_size,
+            page,
+            page_size,
             search: req.search.clone(),
         });
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
+
+        let cache_key = format!(
+            "order_item:find_trashed:page:{page}:size:{page_size}:search:{}",
+            req.search.clone()
+        );
+
+        if let Some(cache) = self
+            .cache_store
+            .get_from_cache::<ApiResponsePagination<Vec<OrderItemResponseDeleteAt>>>(&cache_key)
+            .await
+        {
+            let log_msg = format!("✅ Found {} active roles in cache", cache.data.len());
+            info!("{log_msg}");
+            self.complete_tracing_success(&tracing_ctx, method, &log_msg)
+                .await;
+            return Ok(cache);
+        }
 
         let response = match self.client.clone().find_by_active(request).await {
             Ok(resp) => {
@@ -328,15 +386,19 @@ impl OrderItemGrpcClientTrait for OrderItemGrpcClientService {
             inner.data.into_iter().map(Into::into).collect();
         let order_item_len = order_items.len();
 
-        let reply = ApiResponsePagination {
+        let api_response = ApiResponsePagination {
             status: inner.status,
             message: inner.message,
             data: order_items,
             pagination: inner.pagination.unwrap_or_default().into(),
         };
 
+        self.cache_store
+            .set_to_cache(&cache_key, &api_response, Duration::minutes(30))
+            .await;
+
         info!("Successfully fetched {order_item_len} trashed Order Items");
-        Ok(reply)
+        Ok(api_response)
     }
 
     async fn find_order_item_by_order(
@@ -358,6 +420,19 @@ impl OrderItemGrpcClientTrait for OrderItemGrpcClientService {
         let grpc_req = FindByIdOrderItemRequest { id: order_id };
         let mut request = Request::new(grpc_req);
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
+
+        let cache_key = format!("order_item:find_by_order_id:order_id:{order_id}");
+
+        if let Some(cache) = self
+            .cache_store
+            .get_from_cache::<ApiResponse<Vec<OrderItemResponse>>>(&cache_key)
+            .await
+        {
+            info!("✅ Found order in cache");
+            self.complete_tracing_success(&tracing_ctx, method, "Role retrieved from cache")
+                .await;
+            return Ok(cache);
+        }
 
         let response = match self.client.clone().find_order_item_by_order(request).await {
             Ok(resp) => {
@@ -385,16 +460,20 @@ impl OrderItemGrpcClientTrait for OrderItemGrpcClientService {
         let order_items: Vec<OrderItemResponse> = inner.data.into_iter().map(Into::into).collect();
         let order_item_len = order_items.len();
 
-        let reply = ApiResponse {
+        let api_response = ApiResponse {
             status: inner.status,
             message: inner.message,
             data: order_items,
         };
 
+        self.cache_store
+            .set_to_cache(&cache_key, &api_response, Duration::minutes(30))
+            .await;
+
         info!(
             "Successfully fetched {order_item_len} Order Items for order_id {}",
             order_id
         );
-        Ok(reply)
+        Ok(api_response)
     }
 }

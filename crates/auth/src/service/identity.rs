@@ -17,7 +17,6 @@ use opentelemetry::{
     global::{self, BoxedTracer},
     trace::{Span, SpanKind, TraceContextExt, Tracer},
 };
-use prometheus_client::registry::Registry;
 use shared::{
     abstract_trait::DynJwtService,
     cache::CacheStore,
@@ -48,8 +47,8 @@ pub struct IdentityServiceDeps {
 }
 
 impl IdentityService {
-    pub fn new(deps: IdentityServiceDeps, registry: &mut Registry) -> Result<Self> {
-        let metrics = Metrics::new();
+    pub fn new(deps: IdentityServiceDeps) -> Result<Self> {
+        let metrics = Metrics::new(global::meter("identity-service"));
 
         let IdentityServiceDeps {
             refresh_token_command,
@@ -58,17 +57,6 @@ impl IdentityService {
             user_client,
             cache_store,
         } = deps;
-
-        registry.register(
-            "identity_service_request_counter",
-            "Total number of requests to the IdentityService",
-            metrics.request_counter.clone(),
-        );
-        registry.register(
-            "identity_service_request_duration",
-            "Histogram of request durations for the IdentityService",
-            metrics.request_duration.clone(),
-        );
 
         Ok(Self {
             refresh_token_command,
@@ -192,7 +180,7 @@ impl IdentityServiceTrait for IdentityService {
 
                 let _ = self
                     .cache_store
-                    .delete_from_cache(&format!("auth:refresh:{token}"));
+                    .delete_from_cache(&format!("auth:refresh:{token}")).await;
 
                 self.complete_tracing_error(&tracing_ctx, method, "Token expired")
                     .await;
@@ -271,11 +259,13 @@ impl IdentityServiceTrait for IdentityService {
             ));
         }
 
-        self.cache_store.set_to_cache(
-            &format!("auth:refresh:{refresh_token}"),
-            &user_id,
-            chrono::Duration::hours(24),
-        );
+        self.cache_store
+            .set_to_cache(
+                &format!("auth:refresh:{refresh_token}"),
+                &user_id,
+                chrono::Duration::hours(24),
+            )
+            .await;
 
         self.complete_tracing_success(&tracing_ctx, method, "Token refreshed successfully")
             .await;
@@ -304,7 +294,11 @@ impl IdentityServiceTrait for IdentityService {
 
         let cache_key = format!("auth:getme:{id}");
 
-        if let Some(cached_user) = self.cache_store.get_from_cache::<UserResponse>(&cache_key) {
+        if let Some(cached_user) = self
+            .cache_store
+            .get_from_cache::<UserResponse>(&cache_key)
+            .await
+        {
             info!("✅ Cache hit for user: {id}");
             self.complete_tracing_success(&tracing_ctx, method, "User fetched from cache")
                 .await;
@@ -324,7 +318,8 @@ impl IdentityServiceTrait for IdentityService {
         };
 
         self.cache_store
-            .set_to_cache(&cache_key, &user_response, Duration::minutes(30));
+            .set_to_cache(&cache_key, &user_response, Duration::minutes(30))
+            .await;
 
         self.complete_tracing_success(&tracing_ctx, method, "User profile fetched")
             .await;

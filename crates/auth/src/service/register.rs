@@ -14,7 +14,6 @@ use opentelemetry::{
     global::{self, BoxedTracer},
     trace::{Span, SpanKind, TraceContextExt, Tracer},
 };
-use prometheus_client::registry::Registry;
 use shared::errors::grpc_status_to_service_error;
 use shared::{
     abstract_trait::DynKafka,
@@ -45,25 +44,14 @@ pub struct RegisterService {
 }
 
 impl RegisterService {
-    pub fn new(deps: RegisterServiceDeps, registry: &mut Registry) -> Result<Self> {
-        let metrics = Metrics::new();
+    pub fn new(deps: RegisterServiceDeps) -> Result<Self> {
+        let metrics = Metrics::new(global::meter("register-service"));
 
         let RegisterServiceDeps {
             user_client,
             kafka,
             cache_store,
         } = deps;
-
-        registry.register(
-            "register_service_request_counter",
-            "Total number of requests to the RegisterService",
-            metrics.request_counter.clone(),
-        );
-        registry.register(
-            "register_service_request_duration",
-            "Histogram of request durations for the RegisterService",
-            metrics.request_duration.clone(),
-        );
 
         Ok(Self {
             user_client,
@@ -187,7 +175,11 @@ impl RegisterServiceTrait for RegisterService {
 
         let cache_key = format!("auth:register:{}", req.email);
 
-        if let Some(cached) = self.cache_store.get_from_cache::<UserResponse>(&cache_key) {
+        if let Some(cached) = self
+            .cache_store
+            .get_from_cache::<UserResponse>(&cache_key)
+            .await
+        {
             self.complete_tracing_success(
                 &tracing_ctx,
                 method,
@@ -267,7 +259,8 @@ impl RegisterServiceTrait for RegisterService {
             .map_err(|_| ServiceError::Custom("Failed to send registration email".into()))?;
 
         self.cache_store
-            .set_to_cache(&cache_key, &new_user, Duration::hours(24));
+            .set_to_cache(&cache_key, &new_user, Duration::hours(24))
+            .await;
 
         self.complete_tracing_success(&tracing_ctx, method, "User registered successfully")
             .await;

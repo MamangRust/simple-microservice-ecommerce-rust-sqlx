@@ -22,7 +22,6 @@ use opentelemetry::{
     global::{self, BoxedTracer},
     trace::{Span, SpanKind, TraceContextExt, Tracer},
 };
-use prometheus_client::registry::Registry;
 use shared::{
     abstract_trait::DynKafka,
     cache::CacheStore,
@@ -56,8 +55,8 @@ pub struct PasswordResetService {
 }
 
 impl PasswordResetService {
-    pub fn new(deps: PasswordResetServiceDeps, registry: &mut Registry) -> Result<Self> {
-        let metrics = Metrics::new();
+    pub fn new(deps: PasswordResetServiceDeps) -> Result<Self> {
+        let metrics = Metrics::new(global::meter("password-reset-service"));
 
         let PasswordResetServiceDeps {
             reset_token_query,
@@ -66,18 +65,6 @@ impl PasswordResetService {
             kafka,
             cache_store,
         } = deps;
-
-        registry.register(
-            "password_reset_service_request_counter",
-            "Total number of requests to the PasswordResetService",
-            metrics.request_counter.clone(),
-        );
-
-        registry.register(
-            "password_reset_service_request_duration",
-            "Histogram of request durations for the PasswordResetService",
-            metrics.request_duration.clone(),
-        );
 
         Ok(Self {
             reset_token_query,
@@ -209,6 +196,7 @@ impl PasswordServiceTrait for PasswordResetService {
         if self
             .cache_store
             .get_from_cache::<bool>(&cache_key)
+            .await
             .is_some()
         {
             let msg = "Reset request already sent recently (cached)";
@@ -264,7 +252,8 @@ impl PasswordServiceTrait for PasswordResetService {
         }
 
         self.cache_store
-            .set_to_cache(&cache_key, &true, Duration::minutes(1));
+            .set_to_cache(&cache_key, &true, Duration::minutes(1))
+            .await;
 
         let template = EmailTemplateData {
             title: "Reset Your Password".to_string(),
@@ -335,6 +324,7 @@ impl PasswordServiceTrait for PasswordResetService {
         if self
             .cache_store
             .get_from_cache::<bool>(&cache_key)
+            .await
             .is_some()
         {
             let msg = "Token already used (cached)";
@@ -382,7 +372,8 @@ impl PasswordServiceTrait for PasswordResetService {
             })?;
 
         self.cache_store
-            .set_to_cache(&cache_key, &true, Duration::hours(24));
+            .set_to_cache(&cache_key, &true, Duration::hours(24))
+            .await;
 
         self.complete_tracing_success(&tracing_ctx, method, "Password reset completed")
             .await;
@@ -417,6 +408,7 @@ impl PasswordServiceTrait for PasswordResetService {
         if self
             .cache_store
             .get_from_cache::<bool>(&cache_key)
+            .await
             .is_some()
         {
             let msg = "Code already verified (cached)";
@@ -454,7 +446,8 @@ impl PasswordServiceTrait for PasswordResetService {
             })?;
 
         self.cache_store
-            .set_to_cache(&cache_key, &true, Duration::minutes(5));
+            .set_to_cache(&cache_key, &true, Duration::minutes(5))
+            .await;
 
         self.complete_tracing_success(&tracing_ctx, method, "User marked as verified")
             .await;

@@ -37,6 +37,6 @@ COPY --from=builder --chown=appuser:appuser /app/target/release/user ./server
 
 USER appuser
 
-EXPOSE 50052 8081
+EXPOSE 50052
 
 CMD ["./server"]

@@ -17,7 +17,6 @@ use opentelemetry::{
     global::{self, BoxedTracer},
     trace::{Span, SpanKind, TraceContextExt, Tracer},
 };
-use prometheus_client::registry::Registry;
 use shared::{
     cache::CacheStore,
     errors::ServiceError,
@@ -36,23 +35,8 @@ pub struct RoleQueryService {
 }
 
 impl RoleQueryService {
-    pub fn new(
-        query: DynRoleQueryRepository,
-        registry: &mut Registry,
-        cache_store: Arc<CacheStore>,
-    ) -> Result<Self> {
-        let metrics = Metrics::new();
-
-        registry.register(
-            "role_query_service_request_counter",
-            "Total number of requests to the RoleQueryService",
-            metrics.request_counter.clone(),
-        );
-        registry.register(
-            "role_query_service_request_duration",
-            "Histogram of request durations for the RoleQueryService",
-            metrics.request_duration.clone(),
-        );
+    pub fn new(query: DynRoleQueryRepository, cache_store: Arc<CacheStore>) -> Result<Self> {
+        let metrics = Metrics::new(global::meter("role-query-service"));
 
         Ok(Self {
             query,
@@ -193,6 +177,7 @@ impl RoleQueryServiceTrait for RoleQueryService {
         if let Some(cached) = self
             .cache_store
             .get_from_cache::<ApiResponsePagination<Vec<RoleResponse>>>(&cache_key)
+            .await
         {
             info!("✅ Found {} roles in cache", cached.data.len());
             self.complete_tracing_success(&tracing_ctx, method, "Roles retrieved from cache")
@@ -238,7 +223,8 @@ impl RoleQueryServiceTrait for RoleQueryService {
         };
 
         self.cache_store
-            .set_to_cache(&cache_key, &response, Duration::minutes(5));
+            .set_to_cache(&cache_key, &response, Duration::minutes(5))
+            .await;
 
         info!(
             "✅ Roles retrieved: {} (total: {total})",
@@ -289,6 +275,7 @@ impl RoleQueryServiceTrait for RoleQueryService {
         if let Some(cached) = self
             .cache_store
             .get_from_cache::<ApiResponsePagination<Vec<RoleResponseDeleteAt>>>(&cache_key)
+            .await
         {
             info!("✅ Found {} active roles in cache", cached.data.len());
             self.complete_tracing_success(
@@ -339,7 +326,8 @@ impl RoleQueryServiceTrait for RoleQueryService {
         };
 
         self.cache_store
-            .set_to_cache(&cache_key, &response, Duration::minutes(5));
+            .set_to_cache(&cache_key, &response, Duration::minutes(5))
+            .await;
 
         info!(
             "✅ Found {} active roles (total: {total})",
@@ -390,6 +378,7 @@ impl RoleQueryServiceTrait for RoleQueryService {
         if let Some(cached) = self
             .cache_store
             .get_from_cache::<ApiResponsePagination<Vec<RoleResponseDeleteAt>>>(&cache_key)
+            .await
         {
             info!("✅ Found {} trashed roles in cache", cached.data.len());
             self.complete_tracing_success(
@@ -440,7 +429,8 @@ impl RoleQueryServiceTrait for RoleQueryService {
         };
 
         self.cache_store
-            .set_to_cache(&cache_key, &response, Duration::minutes(5));
+            .set_to_cache(&cache_key, &response, Duration::minutes(5))
+            .await;
 
         info!(
             "✅ Found {} trashed roles (total: {total})",
@@ -471,6 +461,7 @@ impl RoleQueryServiceTrait for RoleQueryService {
         if let Some(cached) = self
             .cache_store
             .get_from_cache::<ApiResponse<RoleResponse>>(&cache_key)
+            .await
         {
             info!("✅ Found role ID {id} in cache");
             self.complete_tracing_success(&tracing_ctx, method, "Role retrieved from cache")
@@ -512,7 +503,8 @@ impl RoleQueryServiceTrait for RoleQueryService {
         };
 
         self.cache_store
-            .set_to_cache(&cache_key, &response, Duration::minutes(5));
+            .set_to_cache(&cache_key, &response, Duration::minutes(5))
+            .await;
 
         info!(
             "✅ Role retrieved: '{}' (ID: {id})",
@@ -543,6 +535,7 @@ impl RoleQueryServiceTrait for RoleQueryService {
         if let Some(cached) = self
             .cache_store
             .get_from_cache::<ApiResponse<RoleResponse>>(&cache_key)
+            .await
         {
             info!("✅ Found role '{name}' in cache");
             self.complete_tracing_success(&tracing_ctx, method, "Role retrieved from cache")
@@ -584,7 +577,8 @@ impl RoleQueryServiceTrait for RoleQueryService {
         };
 
         self.cache_store
-            .set_to_cache(&cache_key, &response, Duration::minutes(5));
+            .set_to_cache(&cache_key, &response, Duration::minutes(5))
+            .await;
 
         info!(
             "✅ Role retrieved: '{}' (ID: {})",
@@ -613,6 +607,18 @@ impl RoleQueryServiceTrait for RoleQueryService {
         let mut request = Request::new(user_id);
         self.inject_trace_context(&tracing_ctx.cx, &mut request);
 
+        let cache_key = format!("role:find_by_user_id:id:{user_id}");
+
+        if let Some(cached) = self
+            .cache_store
+            .get_from_cache::<ApiResponse<Vec<RoleResponse>>>(&cache_key)
+            .await
+        {
+            self.complete_tracing_success(&tracing_ctx, method, "Role retrieved from cache")
+                .await;
+            return Ok(cached);
+        }
+
         let roles = match self.query.find_by_user_id(user_id).await {
             Ok(roles) => {
                 info!("✅ Retrieved {} roles for user ID {user_id}", roles.len());
@@ -636,6 +642,10 @@ impl RoleQueryServiceTrait for RoleQueryService {
             message: "User roles retrieved successfully".to_string(),
             data,
         };
+
+        self.cache_store
+            .set_to_cache(&cache_key, &response, Duration::minutes(5))
+            .await;
 
         info!(
             "✅ Found {} roles for user ID: {user_id}",
