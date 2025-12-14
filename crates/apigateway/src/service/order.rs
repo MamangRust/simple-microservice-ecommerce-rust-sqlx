@@ -525,7 +525,6 @@ impl OrderGrpcClientTrait for OrderGrpcClientService {
             items: req
                 .items
                 .iter()
-                .cloned()
                 .map(|i| CreateOrderItemRequest {
                     price: i.price,
                     product_id: i.product_id,
@@ -607,7 +606,6 @@ impl OrderGrpcClientTrait for OrderGrpcClientService {
             items: req
                 .items
                 .iter()
-                .cloned()
                 .map(|i| UpdateOrderItemRequest {
                     order_item_id: i.order_item_id,
                     price: i.price,
